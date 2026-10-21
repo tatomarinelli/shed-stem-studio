@@ -266,7 +266,9 @@ class Handler(BaseHTTPRequestHandler):
         path = self.path.split("?")[0]
         try:
             if path == "/engine/tidal/login/start":
-                return self._send(200, tidal.login_start())
+                return self._send(200, tidal.login_start(renew="renew=1" in self.path.partition("?")[2].split("&")))
+            if path == "/engine/tidal/login/cancel":
+                return self._send(200, tidal.login_cancel())
             m = re.fullmatch(rf"/engine/analysis/{STEM_ID}/start", path)
             if m:
                 size = int(self.headers.get("Content-Length", 0))

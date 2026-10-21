@@ -22,9 +22,11 @@ class SourceError(Exception):
 
 
 _lock = threading.Lock()
+_start_lock = threading.Lock()
 _session = None
 _cache = {}
 _login = {"state": "idle", "message": ""}  # idle | pending | done | expired | error
+_attempt = None  # el único intento de login vigente (o None)
 
 
 def _get_session():
@@ -88,7 +90,10 @@ def status():
             _get_session()
             return {"connected": True}
         except SourceError as e:
-            return {"connected": False, "code": e.code, "message": e.message}
+            out = {"connected": False, "code": e.code, "message": e.message}
+            if _login["state"] == "pending":
+                out["login"] = _login_view()  # la interfaz retoma el código vigente si se recarga o se vuelve a montar
+            return out
 
 
 def library():
@@ -120,20 +125,42 @@ def playlist_tracks(playlist_id):
         return _cached("pl:" + playlist_id, build)
 
 
-def login_start():
-    """Inicia el login por código de dispositivo. Devuelve el link y el código que el usuario autoriza en el navegador."""
-    import tidalapi
+MIN_REUSE_SECONDS = 20  # si al código vigente le quedan menos, mejor pedir otro
 
+
+def _login_view():
+    """Estado público del intento en curso (siempre con el código vigente y cuándo vence)."""
+    view = {"state": _login["state"], "message": _login["message"]}
+    if _attempt and _login["state"] == "pending":
+        view.update(code=_attempt["code"], url=_attempt["url"], expiresAt=_attempt["expiresAt"],
+                    expiresIn=max(0, round(_attempt["expiresAt"] - time.time())), attempt=_attempt["id"])
+    return view
+
+
+def _finish(attempt, **state):
+    """Cierra un intento; un intento viejo (reemplazado o cancelado) no toca el estado."""
     with _lock:
-        global _session
-        _session = None
-        session = tidalapi.Session()
-        link, future = session.login_oauth()
-        _login.update(state="pending", message="")
+        if _attempt is not attempt:
+            return
+        _login.update(**state)
 
-    def wait():
-        try:
-            future.result()
+
+def _wait_login(attempt, session):
+    """Un solo hilo por intento: sondea cada `interval` hasta autorizar, vencer o que lo reemplacen."""
+    global _session
+    cancel = attempt["cancel"]
+    try:
+        while not cancel.is_set():
+            if time.time() >= attempt["expiresAt"]:
+                return _finish(attempt, state="expired", message="El código venció. Pedí uno nuevo.")
+            try:
+                result = session._check_link_login(attempt["link"], False)  # una sola consulta; TimeoutError = todavía no
+            except TimeoutError:
+                cancel.wait(0.5)  # tidalapi ya espera `interval` dentro de la consulta
+                continue
+            if cancel.is_set():
+                return
+            session.process_auth_token(result, is_pkce_token=False)
             if not session.check_login():
                 raise RuntimeError("login incompleto")
             CONFIG_DIR.mkdir(parents=True, exist_ok=True)
@@ -141,25 +168,71 @@ def login_start():
             session.save_session_to_file(TIDAL_SESSION)
             os.chmod(TIDAL_SESSION, 0o600)
             with _lock:
+                if _attempt is not attempt:
+                    return
+                _session = None
                 _cache.clear()
                 _login.update(state="done", message="")
-        except TimeoutError:
-            _login.update(state="expired", message="El código venció. Pedí uno nuevo.")
-        except Exception as e:
-            _login.update(state="error", message=f"No se pudo iniciar sesión: {type(e).__name__}")
+            return
+    except Exception as e:
+        _finish(attempt, state="error", message=f"No se pudo iniciar sesión: {type(e).__name__}")
 
-    threading.Thread(target=wait, daemon=True).start()
+
+def login_start(renew=False):
+    """Inicia (o retoma) el login por código de dispositivo. Hay un solo intento a la vez.
+
+    Si ya hay uno vigente y no se pide `renew`, devuelve ese mismo código; con `renew` (o si está por vencer)
+    cancela el anterior y pide uno nuevo."""
+    import tidalapi
+
+    global _attempt
+    with _start_lock:  # los pedidos de código se serializan; la red no se hace con _lock tomado
+        with _lock:
+            cur = _attempt
+            if cur and _login["state"] == "pending" and not renew and cur["expiresAt"] - time.time() > MIN_REUSE_SECONDS:
+                return _login_view()
+        session = tidalapi.Session()
+        link = session.get_link_login()
+        with _lock:
+            cur = _attempt
+            if cur:
+                cur["cancel"].set()
+            attempt = _new_attempt(cur, link)
+            _attempt = attempt
+            _login.update(state="pending", message="")
+            view = _login_view()
+    threading.Thread(target=_wait_login, args=(attempt, session), daemon=True).start()
+    return view
+
+
+def _new_attempt(cur, link):
     url = link.verification_uri_complete
-    return {"url": url if url.startswith("http") else "https://" + url, "code": link.user_code, "expiresIn": link.expires_in}
+    return {"id": (cur["id"] + 1) if cur else 1, "link": link, "cancel": threading.Event(), "code": link.user_code,
+            "url": url if url.startswith("http") else "https://" + url,
+            "expiresAt": time.time() + float(link.expires_in), "interval": float(link.interval)}
 
 
 def login_status():
-    return dict(_login)
+    with _lock:
+        return _login_view()
+
+
+def login_cancel():
+    global _attempt
+    with _lock:
+        if _attempt:
+            _attempt["cancel"].set()
+        _attempt = None
+        _login.update(state="idle", message="")
+        return _login_view()
 
 
 def logout():
-    global _session
+    global _session, _attempt
     with _lock:
+        if _attempt:
+            _attempt["cancel"].set()
+        _attempt = None
         _session = None
         _cache.clear()
         _login.update(state="idle", message="")
