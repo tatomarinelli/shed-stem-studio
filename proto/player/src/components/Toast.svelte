@@ -10,7 +10,8 @@
 {/if}
 
 <style>
-  .toast { position: fixed; right: 20px; bottom: 120px; max-width: 420px; display: flex; gap: 12px; align-items: flex-start; padding: 12px 14px; border-radius: 14px; background: rgba(23, 38, 42, 0.8); backdrop-filter: blur(18px); border: 1px solid var(--glass-line); box-shadow: 0 18px 40px -16px rgba(0,0,0,0.8); animation: rise 0.35s var(--ease) both; z-index: 30; }
+  .toast { position: fixed; right: 20px; bottom: max(120px, calc(var(--bar-h, 0px) + 28px)); max-width: 420px; display: flex; gap: 12px; align-items: flex-start; padding: 12px 14px; border-radius: 14px; background: rgba(23, 38, 42, 0.8); backdrop-filter: blur(18px); border: 1px solid var(--glass-line); box-shadow: 0 18px 40px -16px rgba(0,0,0,0.8); animation: rise 0.35s var(--ease) both; z-index: 30; }
   .toast.warn { border-color: color-mix(in srgb, var(--loop) 60%, transparent); }
+  @media (max-width: 760px) { .toast { bottom: calc(var(--bar-h, 0px) + 104px); left: 12px; right: 12px; max-width: none; } }
   button { background: transparent; border: 0; padding: 0 4px; font-size: 20px; line-height: 1; }
 </style>

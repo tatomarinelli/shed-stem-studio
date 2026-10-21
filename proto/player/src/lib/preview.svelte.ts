@@ -1,44 +1,68 @@
-// Escucha previa de un tema sin separarlo: el motor pasa el audio y no guarda nada.
+// Escucha normal de un tema sin separarlo: el motor pasa el audio y no guarda nada.
+// Un único <audio> para toda la cola: así el navegador no bloquea el avance automático.
+// Lo maneja la fachada de `playback.svelte.ts`; acá solo está el elemento y su estado.
 class Preview {
   id = $state('');
-  title = $state('');
   state = $state<'idle' | 'loading' | 'playing' | 'paused' | 'error'>('idle');
   position = $state(0);
   duration = $state(0);
+  volume = 1; // ganancia ya con la curva aplicada
+  onended: (() => void) | null = null;
+  onfailed: (() => void) | null = null;
+  onplaying: (() => void) | null = null;
+  /** Se llama cuando alguien de afuera corta la escucha (por ejemplo, el Estudio empieza a sonar). */
+  onstopped: (() => void) | null = null;
   #audio: HTMLAudioElement | null = null;
 
-  #make(id: string) {
-    this.stop();
-    const a = new Audio(`/engine/play/${id}`);
+  #el() {
+    if (this.#audio) return this.#audio;
+    const a = new Audio();
     a.preload = 'metadata';
-    a.addEventListener('loadedmetadata', () => (this.duration = a.duration));
+    a.volume = this.volume;
+    const dur = () => { if (Number.isFinite(a.duration)) this.duration = a.duration; };
+    a.addEventListener('loadedmetadata', dur);
+    a.addEventListener('durationchange', dur);
     a.addEventListener('timeupdate', () => (this.position = a.currentTime));
-    a.addEventListener('playing', () => (this.state = 'playing'));
+    a.addEventListener('playing', () => { this.state = 'playing'; this.onplaying?.(); });
     a.addEventListener('pause', () => { if (this.state === 'playing') this.state = 'paused'; });
-    a.addEventListener('ended', () => this.stop());
-    a.addEventListener('error', () => (this.state = 'error'));
-    this.#audio = a;
-    this.id = id;
+    a.addEventListener('ended', () => { this.state = 'paused'; this.onended?.(); });
+    a.addEventListener('error', () => { if (this.id) this.#fail(); });
+    return (this.#audio = a);
   }
 
-  async toggle(id: string, title: string) {
-    if (this.id === id && this.#audio && this.state !== 'error') {
-      if (this.state === 'playing') this.#audio.pause();
-      else await this.#audio.play().catch(() => (this.state = 'error'));
-      return;
+  #fail() {
+    if (this.state === 'error') return;
+    this.state = 'error';
+    this.onfailed?.();
+  }
+
+  async play(id: string) {
+    const a = this.#el();
+    this.id = id; this.state = 'loading'; this.position = 0; this.duration = 0;
+    a.src = `/engine/play/${id}`;
+    try { await a.play(); } catch (e) {
+      if (this.id !== id || (e as DOMException).name === 'AbortError') return; // lo pisó otro tema
+      if ((e as DOMException).name === 'NotAllowedError') { this.state = 'paused'; return; } // el navegador pide un gesto: queda en pausa
+      this.#fail();
     }
-    this.#make(id);
-    this.title = title;
-    this.state = 'loading';
-    await this.#audio!.play().catch(() => (this.state = 'error'));
   }
 
-  seek(sec: number) { if (this.#audio) this.#audio.currentTime = sec; }
+  pause() { this.#audio?.pause(); }
+  async resume() {
+    const a = this.#audio;
+    if (!a || !this.id) return;
+    if (this.duration && a.currentTime >= this.duration - 0.1) a.currentTime = 0;
+    try { await a.play(); } catch (e) { const n = (e as DOMException).name; if (n !== 'AbortError' && n !== 'NotAllowedError') this.#fail(); }
+  }
+  seek(sec: number) { if (this.#audio) this.#audio.currentTime = this.position = Math.max(0, sec); }
+  setVolume(g: number) { this.volume = g; if (this.#audio) this.#audio.volume = g; }
 
-  stop() {
-    this.#audio?.pause();
-    this.#audio = null;
+  /** `silent`: lo corta la propia fachada (cambio de tema) y no avisa. */
+  stop(silent = false) {
+    const a = this.#audio;
+    if (a && this.id) { a.pause(); a.removeAttribute('src'); a.load(); }
     this.id = ''; this.state = 'idle'; this.position = 0; this.duration = 0;
+    if (!silent) this.onstopped?.();
   }
 }
 

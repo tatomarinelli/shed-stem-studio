@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { playback } from '../lib/playback.svelte';
   import { nav, SCREENS, type Screen } from '../lib/nav.svelte';
   import { player } from '../lib/player.svelte';
   import { ui } from '../lib/ui.svelte';
@@ -41,7 +42,7 @@
     </a>
   {/if}
   <MenuResources active={working} collapsed={ui.menuCollapsed} />
-  {#if player.status === 'ready' && player.track && !ui.menuCollapsed}
+  {#if playback.mode === 'estudio' && player.track && !ui.menuCollapsed}
     <div class="now">
       <span class="muted">Sonando</span>
       <b>{player.track.title}</b>

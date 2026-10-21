@@ -8,6 +8,7 @@
   import Cover from '../components/Cover.svelte';
   import Combo from '../components/Combo.svelte';
   import TrackRow from '../components/TrackRow.svelte';
+  import { playback, queueItem } from '../lib/playback.svelte';
 
   interface Ids { local?: string; tidal?: string }
   interface Album { key: string; title: string; artist: string; year: number | null; genres: string[]; sources: string[]; localIds: string[]; tidalId: string | null; artUrl: string }
@@ -119,6 +120,8 @@
       tick().then(() => detailEl?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }));
     } catch { albumError = 'No pude hablar con el motor.'; }
   }
+  // Cola del álbum abierto: ▶ en una fila sigue hasta el final del disco.
+  const albumQueue = $derived(openAlbum && albumTracks ? albumTracks.map(x => queueItem({ title: x.title, artist: x.artist, album: x.album, ids: x.ids, art: openAlbum!.artUrl, seconds: x.duration })) : []);
   const similar = (s: { artist: string; album?: string; title?: string }) => { seed.set(s); nav.go('recomendaciones'); };
   const asAlbum = (i: Album | Track) => i as Album;
   const asTrack = (i: Album | Track) => i as Track;
@@ -191,7 +194,10 @@
                 <span class="muted">{openAlbum.artist}{openAlbum.year ? `, ${openAlbum.year}` : ''}</span>
                 <span class="tags">{#each openAlbum.sources as s (s)}<em>{SRC[s] ?? s}</em>{/each}</span>
                 {#if openAlbum.genres.length}<span class="muted g">{openAlbum.genres.join(', ')}</span>{/if}
-                <button class="primary" onclick={() => similar({ artist: openAlbum!.artist, album: openAlbum!.title })}>Recomendar parecidos</button>
+                <div class="btns">
+                  <button class="primary" onclick={() => playback.playFrom(albumQueue, 0)} disabled={!albumQueue.length}>Escuchar el álbum</button>
+                  <button class="ghost" onclick={() => similar({ artist: openAlbum!.artist, album: openAlbum!.title })}>Recomendar parecidos</button>
+                </div>
               </div>
             </div>
             {#if albumError}<p class="err" role="alert">{albumError}</p>
@@ -199,7 +205,7 @@
             {:else}
               <ul class="list">
                 {#each albumTracks as x, i (i + x.title)}
-                  <TrackRow compact n={i + 1} title={x.title} artist={x.artist} album={x.album} duration={mm(x.duration)} ids={x.ids} art={openAlbum.artUrl} />
+                  <TrackRow compact n={i + 1} title={x.title} artist={x.artist} album={x.album} duration={mm(x.duration)} ids={x.ids} art={openAlbum.artUrl} queue={albumQueue} qi={i} />
                 {:else}<li class="muted">Sin temas.</li>{/each}
               </ul>
             {/if}
@@ -260,4 +266,5 @@
   .ah div { display: grid; gap: 4px; min-width: 0; }
   .ah h3 { margin: 0; font-size: 22px; letter-spacing: -0.01em; }
   .g { font-size: 13px; }
+  .btns { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
 </style>

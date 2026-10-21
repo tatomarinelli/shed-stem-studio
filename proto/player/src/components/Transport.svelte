@@ -1,11 +1,27 @@
 <script lang="ts">
+  import { fade } from 'svelte/transition';
   import { player, ENGINES, type EngineName } from '../lib/player.svelte';
+  import { playback } from '../lib/playback.svelte';
+  import PlayerSkin from './PlayerSkin.svelte';
+  import Volume from './Volume.svelte';
+
+  // Dos skins en la misma barra: se funden una sobre la otra (sin movimiento si el sistema lo pide).
+  const still = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const inT = { duration: still ? 0 : 220, delay: still ? 0 : 130 };
+  const outT = { duration: still ? 0 : 120 };
+  // La barra publica su alto para que el contenido y los avisos no queden detrás.
+  let h = $state(0);
+  $effect(() => { document.documentElement.style.setProperty('--bar-h', playback.mode === 'idle' ? '0px' : `${h}px`); });
 
   const clock = (s: number) => `${Math.floor(s / 60)}:${(s % 60).toFixed(1).padStart(4, '0')}`;
   const presets = [0.25, 0.5, 0.75, 1];
 </script>
 
-<footer>
+{#if playback.mode !== 'idle'}
+<footer bind:clientHeight={h}>
+  <div class="skins">
+  {#if playback.mode === 'estudio'}
+  <div class="skin" in:fade={inT} out:fade={outT}>
   <div class="bar">
     <div class="play-group">
       <button class="play" class:live={player.playing} onclick={() => player.toggle()} aria-label={player.playing ? 'Pausar' : 'Reproducir'}>
@@ -42,12 +58,22 @@
         </select>
       </label>
     </div>
+
+    <Volume />
   </div>
   <p class="hint muted">Regla: arrastrá para un loop. Ctrl + rueda: zoom. M: marcar sección. N y P: saltar. S: repetir sección. Espacio: play.</p>
+  </div>
+  {:else}
+  <div class="skin" in:fade={inT} out:fade={outT}><PlayerSkin /></div>
+  {/if}
+  </div>
 </footer>
+{/if}
 
 <style>
   footer { transition: left 0.3s var(--ease); position: fixed; left: calc(var(--menu-w) + 24px); right: 12px; bottom: 12px; background: rgba(15, 26, 29, 0.62); border: 1px solid var(--glass-line); border-radius: 18px; backdrop-filter: blur(22px) saturate(1.4); box-shadow: 0 -1px 0 rgba(255,255,255,0.05) inset, 0 24px 60px -20px rgba(0,0,0,0.8); padding: 12px 22px 8px; animation: rise 0.6s var(--ease) 0.5s both; }
+  .skins { display: grid; }
+  .skin { grid-area: 1 / 1; min-width: 0; }
   .bar { max-width: 2200px; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; gap: 20px 32px; flex-wrap: wrap; }
   .play-group { display: flex; align-items: center; gap: 12px; }
   .play { width: 52px; height: 52px; border-radius: 50%; padding: 0; display: grid; place-items: center; background: var(--text); color: var(--bg); border-color: var(--text); }
