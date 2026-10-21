@@ -4,7 +4,7 @@ Aplicación **local-first** para estudiar música: separa un tema en instrumento
 
 Todo corre en tu máquina. El audio, tus gustos y tu sesión de TIDAL no salen de ahí.
 
-> **Estado: prototipo avanzado.** Probado en Linux (Arch/CachyOS) con una RTX 5080. Windows y macOS sin probar. Ver [Límites conocidos](#límites-conocidos).
+> **Estado: prototipo avanzado.** Probado solo en Linux (Arch/CachyOS) con una RTX 5080. Ver [Sistemas compatibles](#sistemas-compatibles) y [Límites conocidos](#límites-conocidos).
 
 ## Nombre
 El proyecto se llama **Shed Stem Studio** (antes StemShed). Por compatibilidad con datos ya guardados, los identificadores técnicos conservan el nombre anterior: la carpeta `~/.config/stemshed/`, las variables `STEMSHED_*` y los servicios de Docker.
@@ -42,6 +42,16 @@ El proyecto se llama **Shed Stem Studio** (antes StemShed). Por compatibilidad c
 4. **Escrituras solo con un clic.** Guardar en TIDAL pide confirmación y nunca borra nada.
 5. **Sin código ni credenciales de TIDAL en este repo.** La sesión se guarda en tu equipo (`~/.config/stemshed/`).
 
+## Sistemas compatibles
+
+| Sistema | Con Docker | Sin Docker (desarrollo) |
+|---|---|---|
+| **Linux + GPU NVIDIA** | Probado | Probado |
+| **Windows** | Sin probar. Docker Desktop con WSL2 podría funcionar, pero la GPU se conecta distinto: el `compose.yml` usa CDI (`nvidia.com/gpu=all`), que es de Linux. | No funciona hoy: el motor lee `/proc` y `nvidia-smi`, y `npm run worklet` usa `cp`. |
+| **macOS** | Sin probar y sin GPU NVIDIA: la separación iría a CPU, muy lenta. | No funciona hoy (mismos motivos). |
+
+Los comandos de abajo están escritos para Linux (shell tipo bash).
+
 ## Requisitos
 
 - Linux con GPU NVIDIA (la separación en CPU funciona pero es muy lenta).
@@ -54,11 +64,12 @@ El proyecto se llama **Shed Stem Studio** (antes StemShed). Por compatibilidad c
 
 ```bash
 cd docker
-cp .env.example .env     # editá las rutas (música, datos, modelos)
 docker compose up -d --build
 ```
 
-Abrí <http://127.0.0.1:5173> (o el puerto de `STEMSHED_WEB_PORT`). Después, en **Ajustes**:
+No hay nada que configurar: todo queda en `docker/data/` (configuración, datos, modelos y tu música en `docker/data/music`). Para usar otra carpeta o disco, copiá `.env.example` a `.env` y cambiá las rutas.
+
+Abrí <http://127.0.0.1:5173> (o el puerto de `STEMSHED_WEB_PORT`). Se abre el asistente de primeros pasos; también podés hacerlo desde **Ajustes**:
 
 1. **Instalar** el entorno de separación (≈ 8 GB en disco; los programas que corren la IA en tu placa de video).
 2. **Descargar** el modelo de separación.
@@ -133,9 +144,12 @@ Evaluación de la variedad de las recomendaciones (en un entorno aislado): `pyth
 - Credenciales y memoria viven en `~/.config/stemshed/` (permisos `600`). No se versionan.
 - Antes de publicar la web: emparejamiento por código y token por instalación (planificado en `docs/publicacion.md`).
 
-## Licencias y términos
+## Licencia
 
-Sin licencia definida todavía. Pendiente de decidir:
-- **Rubber Band** (estirador por defecto) es GPL: usarlo en una versión publicada haría GPL al proyecto. **SoundTouch** es LGPL.
+Shed Stem Studio es software libre bajo la **GNU General Public License v3.0 o posterior** (GPL-3.0-or-later). Ver [`LICENSE`](LICENSE). Cualquiera puede usarlo, estudiarlo y modificarlo; quien distribuya una versión modificada tiene que publicar su código bajo la misma licencia.
+
+Para tener en cuenta:
+- **Rubber Band** (estirador por defecto, `rubberband-wasm`) se declara GPL-2.0. **Sin verificar** si es "solo v2" o "v2 o posterior": si fuera solo v2, no se podría combinar con una obra GPL-3.0. Hay que confirmarlo con la licencia de la biblioteca original antes de una versión publicada.
 - **Términos de TIDAL** para una versión pública: sin verificar.
-- Modelos de terceros (BS-Roformer, Mistral Nemo, Gemma) tienen sus propias licencias.
+- Los modelos de terceros (BS-Roformer, Mistral Nemo, Gemma) tienen sus propias licencias y no se distribuyen con este repo.
+- Esto no significa que cualquiera pueda escribir en el repo: los cambios de terceros entran por pull request y los acepta quien mantiene el proyecto.

@@ -4,8 +4,7 @@ Levanta el motor (con GPU) y la interfaz, todo en tu máquina: los puertos se pu
 
 ```
 cd docker
-cp .env.example .env        # editá las rutas
-docker compose up -d --build
+docker compose up -d --build        # sin configurar nada: todo queda en docker/data/
 ```
 
 Abrí `http://127.0.0.1:5173` (o el puerto de `STEMSHED_WEB_PORT`).

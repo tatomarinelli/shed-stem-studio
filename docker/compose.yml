@@ -1,12 +1,26 @@
 # Shed Stem Studio en Docker. Todo queda en tu máquina: los puertos se publican solo en 127.0.0.1.
-# Uso:  cp .env.example .env  (editá las rutas)  y  docker compose -f docker/compose.yml up -d --build
+# Uso:  docker compose up -d --build   (sin configurar nada: todo queda en docker/data/)
+# Para mover carpetas a otro disco: copiá .env.example a .env y cambiá las rutas.
 # `docker compose up` levanta todo: motor, servidor de modelos (Ollama) e interfaz.
 # No se descarga ningún modelo solo: se eligen y se bajan desde Ajustes, a la carpeta que indiques.
 name: stemshed
 
 services:
+  # Prepara las carpetas (Docker las crea como root) y se las entrega al usuario del motor. Corre una vez y termina.
+  init:
+    image: stemshed-engine:latest
+    user: "0:0"
+    restart: "no"
+    command: ["sh", "-c", "mkdir -p /models/separation && chown ${STEMSHED_UID:-1000}:${STEMSHED_GID:-1000} /config /data /env /models/separation"]
+    volumes:
+      - ${STEMSHED_CONFIG:-./data/config}:/config
+      - ${STEMSHED_DATA:-./data/stemshed}:/data
+      - ${STEMSHED_ENV:-./data/env}:/env
+      - ${STEMSHED_SEP_MODELS:-./data/models/separation}:/models/separation
+
   engine:
     build: { context: .., dockerfile: docker/Dockerfile.engine }
+    image: stemshed-engine:latest
     user: "${STEMSHED_UID:-1000}:${STEMSHED_GID:-1000}"
     restart: on-failure   # un apagado desde Ajustes no lo reinicia solo
     environment:
@@ -28,6 +42,7 @@ services:
     devices:
       - nvidia.com/gpu=all          # CDI: requiere nvidia-container-toolkit en el host
     depends_on:
+      init: { condition: service_completed_successfully }
       ollama: { condition: service_healthy }
     ports: ["127.0.0.1:${STEMSHED_ENGINE_PORT:-8770}:8770"]
     # Sin GPU: borrá `devices` (la separación va a CPU, muy lenta).
