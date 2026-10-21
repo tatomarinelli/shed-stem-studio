@@ -13,7 +13,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use tauri::{Manager, RunEvent};
+use tauri::{webview::NewWindowResponse, Manager, RunEvent, WebviewUrl, WebviewWindowBuilder};
 
 const PREFERRED_PORT: u16 = 8770; // el origen (puerto) guarda el estado de la interfaz: conviene que no cambie entre sesiones
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
@@ -154,6 +154,34 @@ fn boot(app: tauri::AppHandle) {
     }
 }
 
+/// Abre un enlace externo en el navegador del sistema. Solo http y https, y sin pasar por `cmd` (que interpretaría `&` y similares).
+fn open_external(url: &tauri::Url) {
+    // Al registro va solo el sitio (el enlace de TIDAL lleva un código de autorización).
+    let site = format!("{}://{}", url.scheme(), url.host_str().unwrap_or("?"));
+    if matches!(url.scheme(), "http" | "https") {
+        let res = Command::new("rundll32").args(["url.dll,FileProtocolHandler", url.as_str()]).creation_flags(CREATE_NO_WINDOW).spawn();
+        shell_log(&format!("enlace externo {site}: {}", if res.is_ok() { "abierto en el navegador del sistema" } else { "no se pudo abrir" }));
+    } else {
+        shell_log(&format!("enlace externo {site}: ignorado (solo http y https)"));
+    }
+}
+
+fn shell_log(msg: &str) {
+    let dir = log_dir();
+    let _ = fs::create_dir_all(&dir);
+    if let Ok(mut f) = fs::OpenOptions::new().create(true).append(true).open(dir.join("shell.log")) {
+        let _ = writeln!(f, "{msg}");
+    }
+}
+
+/// ¿Es una página de la propia app (la pantalla de carga o la interfaz que sirve el motor)?
+fn is_internal(url: &tauri::Url) -> bool {
+    match url.scheme() {
+        "http" | "https" => matches!(url.host_str(), Some("tauri.localhost") | Some("127.0.0.1") | Some("localhost")),
+        _ => true, // about:, blob:, data:, tauri:
+    }
+}
+
 fn stop_engine(app: &tauri::AppHandle) {
     if let Some(mut c) = app.state::<Engine>().0.lock().unwrap().take() {
         // Árbol completo (separadores, Ollama que lanzó el motor); el Job Object cubre el caso de cierre brusco.
@@ -173,6 +201,26 @@ fn main() {
         }))
         .manage(Engine(Mutex::new(None)))
         .setup(|app| {
+            // La ventana se crea acá (no en tauri.conf.json) para poder mandar los enlaces externos, como el inicio de sesión de TIDAL
+            // (target="_blank"), al navegador del sistema: dentro de WebView2 esos enlaces no abren nada.
+            WebviewWindowBuilder::new(app, "main", WebviewUrl::App("index.html".into()))
+                .title("Shed Stem Studio")
+                .inner_size(1280.0, 820.0)
+                .min_inner_size(900.0, 600.0)
+                .center()
+                .on_new_window(|url, _features| {
+                    open_external(&url);
+                    NewWindowResponse::Deny
+                })
+                .on_navigation(|url| {
+                    if is_internal(url) {
+                        true
+                    } else {
+                        open_external(url); // un enlace normal tampoco debe sacar a la app de su propia página
+                        false
+                    }
+                })
+                .build()?;
             let handle = app.handle().clone();
             std::thread::spawn(move || boot(handle));
             Ok(())

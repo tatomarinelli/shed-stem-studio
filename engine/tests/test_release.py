@@ -206,5 +206,60 @@ class Ffmpeg(unittest.TestCase):
                 llmserver.ffmpeg_install_start()
 
 
+class Certificados(unittest.TestCase):
+    """PC recién instalada: Python en Windows solo ve el almacén del sistema, que puede no tener las raíces de la CDN de TIDAL."""
+
+    def test_en_windows_apunta_openssl_a_certifi_y_no_pisa_lo_que_ya_hay(self):
+        with tempfile.TemporaryDirectory() as d:
+            bundle = Path(d, "cacert.pem")
+            bundle.write_text("x")
+            fake = mock.Mock()
+            fake.where.return_value = str(bundle)
+            env = {k: v for k, v in os.environ.items() if k != "SSL_CERT_FILE"}
+            with mock.patch.object(osenv, "WINDOWS", True), mock.patch.dict(sys.modules, {"certifi": fake}), mock.patch.dict(os.environ, env, clear=True):
+                self.assertTrue(osenv.use_bundled_ca())
+                self.assertEqual(os.environ["SSL_CERT_FILE"], str(bundle))
+                self.assertFalse(osenv.use_bundled_ca())  # ya estaba puesto: no lo pisa
+
+    def test_fuera_de_windows_no_cambia_nada(self):
+        env = {k: v for k, v in os.environ.items() if k != "SSL_CERT_FILE"}
+        with mock.patch.object(osenv, "WINDOWS", False), mock.patch.dict(os.environ, env, clear=True):
+            self.assertFalse(osenv.use_bundled_ca())
+            self.assertNotIn("SSL_CERT_FILE", os.environ)
+
+    def test_sin_certifi_no_falla(self):
+        env = {k: v for k, v in os.environ.items() if k != "SSL_CERT_FILE"}
+        with mock.patch.object(osenv, "WINDOWS", True), mock.patch.dict(sys.modules, {"certifi": None}), mock.patch.dict(os.environ, env, clear=True):
+            self.assertFalse(osenv.use_bundled_ca())
+
+    def test_ssl_carga_de_verdad_los_certificados_del_paquete(self):
+        try:
+            import certifi
+        except ImportError:
+            self.skipTest("certifi no está instalado en este Python")
+        import ssl
+        env = {k: v for k, v in os.environ.items() if k != "SSL_CERT_FILE"}
+        with mock.patch.dict(os.environ, env, clear=True):
+            sin = ssl.create_default_context().cert_store_stats()["x509_ca"]
+        with mock.patch.dict(os.environ, {**env, "SSL_CERT_FILE": certifi.where()}, clear=True):
+            con = ssl.create_default_context().cert_store_stats()["x509_ca"]
+        self.assertGreaterEqual(con, sin)
+        self.assertGreater(con, 50)  # el paquete trae ~140 raíces
+
+
+class MensajeDeError(unittest.TestCase):
+    def test_un_urlerror_dice_la_causa(self):
+        import ssl
+        import urllib.error
+        import server
+        cert = urllib.error.URLError(ssl.SSLCertVerificationError("unable to get local issuer certificate"))
+        self.assertIn("certificado", server.error_detail(cert))
+        self.assertIn("URLError", server.error_detail(cert))
+        refused = urllib.error.URLError(ConnectionRefusedError("no hay nadie"))
+        self.assertIn("ConnectionRefusedError", server.error_detail(refused))
+        self.assertEqual(server.error_detail(ValueError("x")), "ValueError")
+        self.assertEqual(server.error_detail(urllib.error.URLError("texto suelto")), "URLError")
+
+
 if __name__ == "__main__":
     unittest.main()

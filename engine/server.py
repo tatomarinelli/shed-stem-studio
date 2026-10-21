@@ -7,6 +7,7 @@ import json
 import os
 import osenv
 import re
+import ssl
 import sys
 import urllib.error
 import urllib.parse
@@ -50,6 +51,16 @@ def apply_settings():
     stems.configure(s["dataDir"], s["separationEnvDir"], s["separationModelsDir"])
     analysis.configure(s["dataDir"], s["separationEnvDir"])
     return models.configure(s["ollamaModelsDir"], s["llmUrl"])
+
+
+def error_detail(e):
+    """El tipo de la excepción y, si es de red, la causa (un URLError solo no dice si fue DNS, un proxy o un certificado)."""
+    reason = getattr(e, "reason", None)
+    if isinstance(reason, ssl.SSLCertVerificationError):
+        return f"{type(e).__name__} (no se pudo verificar el certificado de seguridad)"
+    if isinstance(reason, BaseException):
+        return f"{type(e).__name__} ({type(reason).__name__}: {str(reason)[:80]})"
+    return type(e).__name__
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -299,7 +310,8 @@ class Handler(BaseHTTPRequestHandler):
         except tidal.SourceError as e:
             return self._send(409, {"error": e.code, "message": e.message})
         except Exception as e:  # una falla de TIDAL no debe tumbar el motor
-            return self._send(502, {"error": "tidal_error", "message": f"TIDAL respondió con un error: {type(e).__name__}"})
+            print(f"TIDAL: {path} falló con {error_detail(e)}", file=sys.stderr, flush=True)  # queda en el registro del motor
+            return self._send(502, {"error": "tidal_error", "message": f"TIDAL respondió con un error: {error_detail(e)}"})
 
     def do_POST(self):
         # Acciones con efecto: el origen es obligatorio y debe estar en la lista.
@@ -420,7 +432,8 @@ class Handler(BaseHTTPRequestHandler):
         except tidal.SourceError as e:
             return self._send(409, {"error": e.code, "message": e.message})
         except Exception as e:
-            return self._send(502, {"error": "tidal_error", "message": f"No se pudo completar la acción: {type(e).__name__}"})
+            print(f"TIDAL: {path} falló con {error_detail(e)}", file=sys.stderr, flush=True)
+            return self._send(502, {"error": "tidal_error", "message": f"No se pudo completar la acción: {error_detail(e)}"})
 
     def handle(self):
         try:
@@ -434,6 +447,7 @@ class Handler(BaseHTTPRequestHandler):
 
 if __name__ == "__main__":
     port = int(sys.argv[1]) if len(sys.argv) > 1 else 8770
+    osenv.use_bundled_ca()  # Windows: certificados de certifi además del almacén del sistema (PC recién instalada)
     osenv.kill_children_on_exit()  # Windows: los procesos hijos mueren con el motor
     osenv.ensure_ffmpeg_on_path()  # audio-separator lo necesita; en Windows lo instala winget fuera del PATH de este proceso
     apply_settings()

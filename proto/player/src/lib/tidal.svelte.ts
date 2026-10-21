@@ -133,12 +133,19 @@ class Tidal {
     this.#autoRenewals = 0;
     this.loginNotice = '';
     await this.#start(false);
+    this.#openLogin();
+  }
+
+  /** Abre el enlace de autorización en el navegador (en la app de escritorio lo manda al navegador del sistema). Si algo lo bloquea, el enlace queda visible debajo del botón. */
+  #openLogin() {
+    if (this.state === 'logging_in' && this.loginUrl) window.open(this.loginUrl, '_blank', 'noopener,noreferrer');
   }
 
   /** Pedir otro código a mano. */
   async renew() {
     this.#autoRenewals = 0;
     await this.#start(true, 'Pedimos un código nuevo.');
+    this.#openLogin();
   }
 
   async cancelLogin() {

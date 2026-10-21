@@ -110,6 +110,23 @@ def ensure_ffmpeg_on_path():
     return bool(folder)
 
 
+def use_bundled_ca():
+    """Windows: que urllib (y los procesos hijos) también confíen en los certificados de `certifi`. Python en Windows lee solo el almacén
+    del sistema, y en una PC recién instalada todavía no tiene las autoridades raíz de la CDN de TIDAL: el audio falla con
+    URLError (CERTIFICATE_VERIFY_FAILED) aunque el inicio de sesión (requests, que trae certifi) ande. Devuelve True si lo aplicó."""
+    if not WINDOWS or os.environ.get("SSL_CERT_FILE"):
+        return False
+    try:
+        import certifi
+        bundle = certifi.where()
+    except Exception:
+        return False
+    if not os.path.isfile(bundle):
+        return False
+    os.environ["SSL_CERT_FILE"] = bundle  # OpenSSL lo suma al almacén del sistema: ssl.create_default_context() lo lee
+    return True
+
+
 def find_uv():
     """`uv` (Astral): el empaquetado en runtime/tools junto al motor, STEMSHED_UV, o el del PATH solo en Windows. None si no hay:
     entonces el entorno se crea con venv y pip, como siempre (Linux y Docker no cambian)."""
