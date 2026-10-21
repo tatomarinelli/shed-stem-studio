@@ -13,7 +13,9 @@ x-logging: &logging
 services:
   # Prepara las carpetas (Docker las crea como root) y se las entrega al usuario del motor. Corre una vez y termina.
   init:
+    build: { context: .., dockerfile: docker/Dockerfile.engine }
     image: stemshed-engine:latest
+    pull_policy: never   # es la imagen que se construye acá: nunca se busca en un registro
     user: "0:0"
     restart: "no"
     command: ["sh", "-c", "mkdir -p /models/separation && chown ${STEMSHED_UID:-1000}:${STEMSHED_GID:-1000} /config /data /env /models/separation /cache"]
@@ -28,6 +30,7 @@ services:
   engine:
     build: { context: .., dockerfile: docker/Dockerfile.engine }
     image: stemshed-engine:latest
+    pull_policy: never
     user: "${STEMSHED_UID:-1000}:${STEMSHED_GID:-1000}"
     restart: on-failure   # un apagado desde Ajustes no lo reinicia solo
     environment:
