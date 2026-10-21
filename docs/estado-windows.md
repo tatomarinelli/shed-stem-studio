@@ -15,10 +15,17 @@ Se arman con `powershell -ExecutionPolicy Bypass -File windows\build\build.ps1`.
 
 | Versión | Fecha | Commit | Enlace | SHA-256 (instalador / zip) |
 |---|---|---|---|---|
+| 0.0.3 | 2026-10-21 | `9ed8abf` | https://github.com/tatomarinelli/shed-stem-studio/releases/tag/v0.0.3 | `71e844a7…f41d` / `8add727d…d155` |
 | 0.0.2 | 2026-10-21 | `9ed1ab3` | https://github.com/tatomarinelli/shed-stem-studio/releases/tag/v0.0.2 | `6cc6d911…55bf` / `e2c260fe…46db` |
 | 0.0.1 | 2026-10-21 | `9029abd` | https://github.com/tatomarinelli/shed-stem-studio/releases/tag/v0.0.1 | `5621ac0a…2485` / `91208a6d…3b5a` |
 
-Los hashes coinciden con los que calcula el servidor. **Usar la 0.0.2**: la 0.0.1 no reproduce audio de TIDAL en una PC recién instalada.
+Los hashes coinciden con los que calcula el servidor. **Usar la 0.0.3**: la 0.0.1 no reproduce audio de TIDAL y la 0.0.2 no puede separar temas de TIDAL en una PC recién instalada.
+
+### Lo que apareció al probar la 0.0.2 en una PC limpia (corregido en la 0.0.3)
+
+- **Separar un tema de TIDAL: "Error I/O"** (502). `fetch_source` le pasaba la URL https de TIDAL a `ffmpeg`, que está construido con GnuTLS y en Windows solo confía en el almacén del sistema (el mismo defecto que Python, ya corregido en la 0.0.2 para el audio). Reproducido con un servidor https de certificado no confiable: `[tls] Peer certificate failed verification` y `Error opening input: I/O error`; con `-ca_file` funciona. Ahora Python baja el audio con `certifi` y `ffmpeg` solo convierte un archivo local (reintentos, progreso, cancelación); si falla, queda el camino viejo con `-ca_file` para las URL https directas.
+- El log de esa PC (`engine.log`, 120 bytes) no traía el error porque los fallos del trabajo de separación no se registraban: ahora sí (`Separación <id> falló: …`) y el error de `ffmpeg` incluye las dos últimas líneas.
+- **No confirmado todavía en una PC limpia real con la 0.0.3.** El camino DASH (segmentos concatenados en un MP4 fragmentado) no se probó contra TIDAL real; si no convierte, cae al camino viejo.
 
 ### Lo que apareció al probar la 0.0.1 en una PC limpia (corregido en la 0.0.2)
 
