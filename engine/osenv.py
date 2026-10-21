@@ -108,3 +108,94 @@ def cpu_name():
             return winreg.QueryValueEx(k, "ProcessorNameString")[0].strip()
     except (ImportError, OSError):
         return ""
+
+
+# ------------------------------------------------------------------------------------------ Windows: DPAPI y Job Object
+# SIN VERIFICAR EN WINDOWS: escrito contra la documentación de la API (CryptProtectData, JobObjects).
+
+_DPAPI_MAGIC = b"STEMSHED-DPAPI1\n"
+
+
+def _blob(data):
+    import ctypes
+    from ctypes import wintypes
+
+    class Blob(ctypes.Structure):
+        _fields_ = [("cbData", wintypes.DWORD), ("pbData", ctypes.POINTER(ctypes.c_char))]
+    buf = ctypes.create_string_buffer(data, len(data))
+    return Blob(len(data), ctypes.cast(buf, ctypes.POINTER(ctypes.c_char))), buf
+
+
+def _dpapi(data, protect):
+    import ctypes
+    inb, _keep = _blob(data)
+    out = type(inb)()
+    fn = ctypes.windll.crypt32.CryptProtectData if protect else ctypes.windll.crypt32.CryptUnprotectData
+    if not fn(ctypes.byref(inb), None, None, None, None, 0, ctypes.byref(out)):
+        raise OSError("DPAPI falló")
+    try:
+        return ctypes.string_at(out.pbData, out.cbData)
+    finally:
+        ctypes.windll.kernel32.LocalFree(out.pbData)
+
+
+def protect_file(path):
+    """Cifra el archivo con DPAPI (solo lo abre el mismo usuario de Windows). En otros sistemas no hace nada."""
+    if not WINDOWS:
+        return
+    p = Path(path)
+    raw = p.read_bytes()
+    if raw.startswith(_DPAPI_MAGIC):
+        return
+    p.write_bytes(_DPAPI_MAGIC + _dpapi(raw, True))
+
+
+def read_protected(path):
+    """Contenido del archivo; si está cifrado con DPAPI lo descifra. Un archivo en claro se lee tal cual."""
+    raw = Path(path).read_bytes()
+    if raw.startswith(_DPAPI_MAGIC):
+        if not WINDOWS:
+            raise OSError("Archivo cifrado con DPAPI: solo se abre en Windows.")
+        return _dpapi(raw[len(_DPAPI_MAGIC):], False)
+    return raw
+
+
+_job = None
+
+
+def kill_children_on_exit():
+    """Windows: mete al motor en un Job Object que mata a todos sus procesos hijos cuando el motor termina
+    (también si lo matan de golpe), así no quedan separadores ni Ollama huérfanos. Devuelve True si quedó activo."""
+    global _job
+    if not WINDOWS or _job:
+        return bool(_job)
+    import ctypes
+    from ctypes import wintypes
+    k32 = ctypes.windll.kernel32
+
+    class Basic(ctypes.Structure):
+        _fields_ = [("PerProcessUserTimeLimit", ctypes.c_longlong), ("PerJobUserTimeLimit", ctypes.c_longlong),
+                    ("LimitFlags", wintypes.DWORD), ("MinimumWorkingSetSize", ctypes.c_size_t),
+                    ("MaximumWorkingSetSize", ctypes.c_size_t), ("ActiveProcessLimit", wintypes.DWORD),
+                    ("Affinity", ctypes.c_size_t), ("PriorityClass", wintypes.DWORD), ("SchedulingClass", wintypes.DWORD)]
+
+    class IoCounters(ctypes.Structure):
+        _fields_ = [(n, ctypes.c_ulonglong) for n in ("a", "b", "c", "d", "e", "f")]
+
+    class Extended(ctypes.Structure):
+        _fields_ = [("BasicLimitInformation", Basic), ("IoInfo", IoCounters), ("ProcessMemoryLimit", ctypes.c_size_t),
+                    ("JobMemoryLimit", ctypes.c_size_t), ("PeakProcessMemoryUsed", ctypes.c_size_t),
+                    ("PeakJobMemoryUsed", ctypes.c_size_t)]
+    k32.CreateJobObjectW.restype = wintypes.HANDLE
+    job = k32.CreateJobObjectW(None, None)
+    if not job:
+        return False
+    info = Extended()
+    info.BasicLimitInformation.LimitFlags = 0x2000  # JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
+    if not k32.SetInformationJobObject(job, 9, ctypes.byref(info), ctypes.sizeof(info)):  # 9 = ExtendedLimitInformation
+        return False
+    k32.GetCurrentProcess.restype = wintypes.HANDLE
+    if not k32.AssignProcessToJobObject(job, k32.GetCurrentProcess()):
+        return False
+    _job = job  # el handle vive mientras viva el proceso
+    return True

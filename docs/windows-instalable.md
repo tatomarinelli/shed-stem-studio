@@ -67,7 +67,7 @@ El motor tiene supuestos de Linux. Los encontrados en el código:
 | Pruebas con rutas Unix | `engine/tests` | Pasarlas a `pathlib` y a carpetas temporales. |
 | Apagado desde Ajustes | `services.py` | Debe cerrar también el entorno hijo y Ollama si lo lanzó el motor. |
 
-**Avance (etapa 1, parcial, 2026-10-21):** `engine/osenv.py` concentra rutas del venv (`Scripts\\*.exe`), carpeta de configuración (`%APPDATA%\\ShedStemStudio`), carpetas prohibidas de Windows, selector de unidades, `chmod` omitido, `CREATE_NO_WINDOW` y prioridad baja, `TEMP`/`TMP`, RAM y CPU por `ctypes`/registro, e ids de archivo sin distinguir mayúsculas. Probado **solo con simulaciones desde Linux** (`tests/test_osenv.py`); falta correr los tests en Windows de verdad. Pendiente de la tabla: DPAPI para la sesión de TIDAL, apagado del árbol de procesos, `services.py` y pruebas con rutas Unix.
+**Avance (etapa 1, parcial, 2026-10-21):** `engine/osenv.py` concentra rutas del venv (`Scripts\\*.exe`), carpeta de configuración (`%APPDATA%\\ShedStemStudio`), carpetas prohibidas de Windows, selector de unidades, `chmod` omitido, `CREATE_NO_WINDOW` y prioridad baja, `TEMP`/`TMP`, RAM y CPU por `ctypes`/registro, e ids de archivo sin distinguir mayúsculas. Probado **solo con simulaciones desde Linux** (`tests/test_osenv.py`); falta correr los tests en Windows de verdad. También: sesión de TIDAL cifrada con DPAPI (`protect_file`/`read_protected`) y Job Object que mata a los procesos hijos cuando termina el motor (`kill_children_on_exit`); ambos **sin verificar en Windows real** (solo con simulaciones). Pendiente: correr los tests en Windows y revisar `open_folder` en `services.py`.
 
 ## 5. Trabajo en la interfaz y la cáscara
 

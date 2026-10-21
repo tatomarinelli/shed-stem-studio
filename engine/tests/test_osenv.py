@@ -77,6 +77,32 @@ class OsenvTest(unittest.TestCase):
             with self.assertRaises(settings.SettingsError):
                 settings._abs_dir("C:\\Windows\\Temp", "Datos")
 
+    def test_dpapi_ida_y_vuelta_y_archivo_en_claro(self):
+        with tempfile.TemporaryDirectory() as d:
+            f = Path(d) / "s.json"
+            f.write_bytes(b'{"a": 1}')
+            self.assertEqual(osenv.read_protected(f), b'{"a": 1}')  # en claro se lee tal cual
+            with mock.patch.object(osenv, "WINDOWS", True), \
+                    mock.patch.object(osenv, "_dpapi", side_effect=lambda data, protect: data[::-1]):
+                osenv.protect_file(f)
+                self.assertTrue(f.read_bytes().startswith(osenv._DPAPI_MAGIC))
+                self.assertNotEqual(f.read_bytes()[len(osenv._DPAPI_MAGIC):], b'{"a": 1}')
+                self.assertEqual(osenv.read_protected(f), b'{"a": 1}')
+                osenv.protect_file(f)  # no se cifra dos veces
+                self.assertEqual(osenv.read_protected(f), b'{"a": 1}')
+
+    def test_dpapi_fuera_de_windows_no_toca_el_archivo(self):
+        with tempfile.TemporaryDirectory() as d:
+            f = Path(d) / "s.json"
+            f.write_bytes(b"{}")
+            with mock.patch.object(osenv, "WINDOWS", False):
+                osenv.protect_file(f)
+            self.assertEqual(f.read_bytes(), b"{}")
+
+    def test_job_object_fuera_de_windows_no_hace_nada(self):
+        with mock.patch.object(osenv, "WINDOWS", False):
+            self.assertFalse(osenv.kill_children_on_exit())
+
 
 if __name__ == "__main__":
     unittest.main()

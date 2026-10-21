@@ -5,6 +5,7 @@ Todo lo que viene de afuera (ruta, parámetros, cabeceras) se trata como dato.
 """
 import json
 import os
+import osenv
 import re
 import sys
 import urllib.error
@@ -390,6 +391,7 @@ class Handler(BaseHTTPRequestHandler):
 
 if __name__ == "__main__":
     port = int(sys.argv[1]) if len(sys.argv) > 1 else 8770
+    osenv.kill_children_on_exit()  # Windows: los procesos hijos mueren con el motor
     apply_settings()
     models.ensure_ollama()
     catalog.load_state()

@@ -41,10 +41,28 @@ def _get_session():
     if not TIDAL_SESSION.exists():
         raise SourceError("no_session", "Todavía no conectaste TIDAL. Tocá Conectar TIDAL para iniciar sesión.")
     session = tidalapi.Session()
-    if not session.load_session_from_file(TIDAL_SESSION) or not session.check_login():
+    if not _load_session(session) or not session.check_login():
         raise SourceError("session_expired", "La sesión de TIDAL venció. Tocá Conectar TIDAL para iniciar sesión de nuevo.")
     _session = session
     return session
+
+
+def _load_session(session):
+    """tidalapi lee de un archivo: si el nuestro está cifrado (Windows, DPAPI) se descifra a un temporal que se borra enseguida."""
+    try:
+        raw = osenv.read_protected(TIDAL_SESSION)
+    except OSError:
+        return False
+    if not TIDAL_SESSION.read_bytes().startswith(osenv._DPAPI_MAGIC):
+        return session.load_session_from_file(TIDAL_SESSION)
+    import tempfile
+    fd, tmp = tempfile.mkstemp(suffix=".json")
+    try:
+        with os.fdopen(fd, "wb") as f:
+            f.write(raw)
+        return session.load_session_from_file(Path(tmp))
+    finally:
+        Path(tmp).unlink(missing_ok=True)
 
 
 def _cached(key, fn):
@@ -168,6 +186,7 @@ def _wait_login(attempt, session):
             osenv.secure(CONFIG_DIR, 0o700)
             session.save_session_to_file(TIDAL_SESSION)
             osenv.secure(TIDAL_SESSION, 0o600)
+            osenv.protect_file(TIDAL_SESSION)
             with _lock:
                 if _attempt is not attempt:
                     return
