@@ -5,7 +5,10 @@
   import FolderPicker from '../components/FolderPicker.svelte';
   import Progress from '../components/Progress.svelte';
   import { setup } from '../lib/setup.svelte';
+  import Icon from '../components/Icon.svelte';
+  import ResourceMonitor from '../components/ResourceMonitor.svelte';
 
+  let resOpen = $state(true); // "Recursos" arranca abierto; cerrado, no se sondea
   onMount(() => {
     void settings.load();
     settings.watchServices(true);
@@ -233,6 +236,11 @@
     </dl>
   </section>
 
+  <details class="card adv" open ontoggle={e => (resOpen = e.currentTarget.open)}>
+    <summary><Icon name="medidor" size={18} /> Recursos</summary>
+    {#if resOpen}<ResourceMonitor />{/if}
+  </details>
+
   <details class="card adv">
     <summary>Carpetas y ubicaciones</summary>
 
@@ -305,8 +313,8 @@
   .models, .paths { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
   .models li { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 10px 12px; border-radius: 12px; background: rgba(255,255,255,0.04); border: 1px solid transparent; transition: border-color 0.3s, background 0.3s; }
   .models li.use { border-color: color-mix(in srgb, #7cc7a3 55%, transparent); background: rgba(124, 199, 163, 0.08); }
-  .hw { display: grid; grid-template-columns: max-content 1fr; gap: 6px 20px; margin: 0; }
-  .hw dt { color: var(--muted); } .hw dd { margin: 0; }
+  .hw { display: grid; grid-template-columns: minmax(0, max-content) 1fr; gap: 6px 20px; margin: 0; }
+  .hw dt { color: var(--muted); overflow-wrap: anywhere; } .hw dd { margin: 0; overflow-wrap: anywhere; }
   .reco { font-size: 12px; font-weight: 600; color: var(--bg); background: #7cc7a3; border-radius: 999px; padding: 1px 10px; margin-left: 6px; white-space: nowrap; vertical-align: 1px; }
   .ok { color: #7cc7a3; } .warn { color: #f0a43c; }
   .badge { font-size: 12.5px; font-weight: 600; color: #7cc7a3; border: 1px solid color-mix(in srgb, #7cc7a3 50%, transparent); border-radius: 999px; padding: 2px 12px; white-space: nowrap; }
@@ -323,6 +331,7 @@
   .custom label { display: grid; gap: 4px; flex: 1; min-width: 220px; color: var(--muted); font-size: 0.85rem; }
   .act { display: grid; gap: 6px; justify-items: end; min-width: 190px; }
   .adv summary { cursor: pointer; font-weight: 600; font-size: 17px; }
+  .adv summary :global(svg) { vertical-align: -3px; margin-right: 4px; }
   .adv[open] summary { margin-bottom: 10px; }
   .field { display: grid; gap: 2px; padding: 10px 0; border-top: 1px solid var(--glass-line); }
   .head { display: flex; justify-content: space-between; align-items: center; gap: 12px; }

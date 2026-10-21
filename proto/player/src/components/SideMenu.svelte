@@ -4,6 +4,7 @@
   import { ui } from '../lib/ui.svelte';
   import { settings } from '../lib/settings.svelte';
   import { separation } from '../lib/separation.svelte';
+  import MenuResources from './MenuResources.svelte';
 
   const items: Record<Screen, { label: string; icon: string }> = {
     fuentes: { label: 'Fuentes', icon: 'M4 6h16M4 12h16M4 18h10' },
@@ -15,6 +16,8 @@
   const idx = $derived(SCREENS.indexOf(nav.screen));
   const separating = $derived(separation.processing.length > 0);
   const downloads = $derived((settings.services?.jobs ?? []).filter(j => j.kind === 'descarga' || j.kind === 'instalación'));
+  // Hay un trabajo pesado (separación, descarga, recomendación, análisis): se muestra la barra de recursos.
+  const working = $derived(separation.busy || (settings.services?.jobs.length ?? 0) > 0);
 </script>
 
 <nav aria-label="Secciones" class:collapsed={ui.menuCollapsed}>
@@ -37,6 +40,7 @@
       {#if !ui.menuCollapsed}<span>{downloads.length === 1 ? `${downloads[0].label} ${downloads[0].percent ?? 0} %` : `${downloads.length} descargas`}</span>{/if}
     </a>
   {/if}
+  <MenuResources active={working} collapsed={ui.menuCollapsed} />
   {#if player.status === 'ready' && player.track && !ui.menuCollapsed}
     <div class="now">
       <span class="muted">Sonando</span>

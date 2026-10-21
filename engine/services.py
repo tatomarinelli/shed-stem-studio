@@ -11,6 +11,7 @@ import analysis
 import envsetup
 import models
 import recs
+import resources
 import settings
 import stems
 import tidal_source
@@ -86,6 +87,7 @@ def shutdown():
     def stop():
         time.sleep(0.4)  # deja salir la respuesta
         models.stop_own_ollama()
+        resources.SAMPLER.stop()  # cierra el nvidia-smi persistente
         if httpd:
             httpd.shutdown()
 

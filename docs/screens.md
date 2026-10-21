@@ -53,6 +53,8 @@ Queda **exclusivamente para el DAW y la gestión de lo descargado**.
 
 Modelos por módulo y cuál está en uso, specs del equipo, carpetas y ubicaciones editables, orden de las fuentes de audio. Ver `docs/settings.md`.
 
+**Recursos** (sección abierta por defecto): monitor en tiempo real de CPU, memoria, placa de video (uso, memoria, temperatura, potencia), discos y procesos de la app; gráficos de los últimos 5 minutos. Con un trabajo activo, el menú lateral muestra una barra con la memoria de video usada. Ver `docs/resource-monitor.md`.
+
 ## Primeros pasos (asistente de primer inicio)
 
 Pantalla completa que se abre sola la primera vez que falta algo esencial (separación, música, modelo, perfil). Ocho páginas: bienvenida, tu equipo, dónde guardar, separar en instrumentos, tu música (archivos y TIDAL), recomendaciones (modelo), tu perfil (pre-cargado con tus favoritos) y listo (con "Armar mi primer disco"). Cada paso esencial se puede dejar para más tarde; después queda un aviso con "Completar". Se repite desde Ajustes. Detalle en `docs/wizard-inicio.md`.
