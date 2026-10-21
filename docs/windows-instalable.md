@@ -83,7 +83,7 @@ El motor tiene supuestos de Linux. Los encontrados en el código:
 |---|---|---|
 | **NVIDIA** (RTX 20 en adelante, probado en RTX 5080 en Linux) | Torch con CUDA 12.8; necesita un controlador reciente (**versión mínima a verificar**; el instalador debe comprobarla y avisar con un enlace) | Objetivo de la v1 |
 | **Sin GPU compatible** | Separación en CPU, **mucho más lenta** (no medida): se avisa antes de instalar el entorno | v1, con advertencia |
-| **AMD / Intel** | Requeriría exportar el modelo de separación a ONNX y usar DirectML. La exportación de BS-Roformer-SW **no se hizo** (Fase 0.B) | Posterior, si la exportación sirve |
+| **AMD / Intel** | Torch no tiene aceleración para estas placas en Windows: la separación va a **CPU**. Para usar la placa habría que exportar el modelo a ONNX y usar DirectML (`onnxruntime-directml` existe para Python 3.11 a 3.14). La exportación de BS-Roformer-SW **no se hizo** (Fase 0.B) | CPU en la v1 (se mide en la notebook de prueba); DirectML, posterior |
 
 ## 7. Seguridad, datos y desinstalación
 
@@ -116,6 +116,31 @@ El motor tiene supuestos de Linux. Los encontrados en el código:
 - **Pruebas manuales en una máquina Windows con NVIDIA**: instalar entorno, separar un tema, analizar, recomendar con Ollama, desinstalar. **Hoy no tengo acceso a una**: es el principal requisito para avanzar.
 - Casos a cubrir: Windows 10 y 11, usuario con espacios y tildes en el nombre (`C:\Users\José Pérez`), disco secundario para datos, sin GPU, controlador viejo, sin internet en un paso, antivirus activo, instalación sobre una versión anterior.
 
+## 10 bis. Lo ya verificado (2026-10-21, desde Linux, sin máquina Windows)
+
+- **Ruedas (wheels) de las 83 dependencias fijadas** (`engine/requirements-env.txt`) para Windows x64 con Python 3.12, 3.13 y 3.14: todas existen **salvo `diffq`**, que solo se publica como código fuente y exigiría un compilador de C en el equipo del usuario. Cuatro son solo de Linux (`triton`, `nvidia-cufile-cu12`, `nvidia-nccl-cu12`, `nvidia-nvshmem-cu12`) y no aplican en Windows.
+- **`diffq` no hace falta para separar:** probé BS-Roformer-SW sin `diffq` instalado (importación bloqueada) y separó un clip en 6 stems. En Windows se omite.
+- **Torch en Windows:** existen `torch` y `torchaudio` 2.11.0 para `cu128` (NVIDIA) y para CPU (AMD, Intel o sin GPU), en Python 3.12, 3.13 y 3.14. En Windows las bibliotecas de CUDA vienen dentro de la rueda de torch, así que la lista de requisitos para Windows es distinta a la de Linux (sin los `nvidia-*`) y hay **dos variantes**: NVIDIA y CPU.
+- **Sin verificar:** que la instalación completa funcione en Windows, que `numba`/`librosa`/`soxr` se comporten igual, y la velocidad en CPU.
+
+## 10 ter. Máquina de prueba: notebook con Windows y placa AMD
+
+Sirve para casi todo, menos para verificar la ruta NVIDIA.
+
+| Se puede probar | No se puede probar |
+|---|---|
+| Ventana (WebView2): audio, AudioWorklet, aislamiento de origen | Separación con CUDA y su velocidad |
+| Motor portable y sus pruebas | Controlador mínimo de NVIDIA y su mensaje de error |
+| Instalador, desinstalador, accesos directos, SmartScreen | Rendimiento de Ollama con una GPU NVIDIA |
+| Asistente de primeros pasos completo | |
+| **Separación y análisis en CPU** (la ruta de AMD/Intel/sin GPU) | |
+| Ollama en CPU o con la placa AMD (según el modelo: las integradas casi nunca se usan) | |
+| Rutas con tildes y espacios, antivirus de Windows | |
+
+Para la ruta NVIDIA hace falta otro equipo o un colaborador; mientras tanto se confía en la ruta de Linux, que es la misma de torch.
+
+Primer paso: correr `tools/windows/diagnostico.ps1` en la notebook (no instala nada ni usa internet; genera un archivo con el hardware, el controlador de video, el espacio libre y si están WebView2, Python y ffmpeg) y pegar el resultado.
+
 ## 11. Etapas
 
 | # | Etapa | Salida (criterio de aceptación) |
@@ -131,7 +156,8 @@ El motor tiene supuestos de Linux. Los encontrados en el código:
 
 ## 12. Riesgos
 
-- **No hay máquina Windows con NVIDIA disponible** para probar: sin eso, solo se puede verificar la parte sin GPU.
+- **No hay máquina Windows con NVIDIA disponible** (solo una notebook con AMD): la ruta CUDA queda sin verificar en Windows.
+- **Velocidad en CPU**: no medida; separar un tema podría tardar muchos minutos. Hay que medirlo en la notebook antes de prometer algo a usuarios sin NVIDIA.
 - **WebView2 y el audio**: si el AudioWorklet o el aislamiento de origen se comportan distinto, cambia la decisión de cáscara.
 - **Ruedas (wheels) de Python 3.14 en Windows**: alguna dependencia (`soxr`, `samplerate`, `numba`, `onnxruntime-gpu`) podría no tenerla; habría que fijar otra versión de Python y volver a medir el análisis.
 - **Antivirus y SmartScreen** sobre un instalador nuevo y sin reputación.
@@ -145,6 +171,6 @@ El motor tiene supuestos de Linux. Los encontrados en el código:
 2. ¿Instalador chico que baja todo desde el asistente (propuesta) o también uno completo sin conexión?
 3. ¿Solo NVIDIA en la v1, con CPU como respaldo? (propuesta: sí)
 4. ¿Firma de código desde la beta, o primero beta sin firma y avisando de SmartScreen?
-5. ¿Hay una máquina Windows con NVIDIA para probar? ¿O un colaborador que la tenga?
+5. ~~¿Hay una máquina Windows para probar?~~ Hay una notebook con AMD (sin CUDA). Falta una máquina o colaborador con NVIDIA para verificar esa ruta.
 6. ¿Ollama oficial instalado desde el asistente (propuesta) o incluido en el instalador?
 7. ¿Canal de distribución: solo GitHub Releases al principio, y winget después?
