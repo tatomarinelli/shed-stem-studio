@@ -12,6 +12,7 @@ Errores para el usuario: AnalysisError (mensaje en español). Ids inválidos: Va
 """
 import json
 import os
+import osenv
 import re
 import subprocess
 import sys
@@ -27,7 +28,7 @@ SCRIPT = Path(__file__).with_name("analyze.py")
 PROGRESS = re.compile(r"^PROGRESS (\w+) (\d{1,3})$")
 
 _data_dir = None                # None = la carpeta de datos de stems (stems.ROOT)
-_python = None                  # None = <separationEnvDir>/venv/bin/python (stems.ENV)
+_python = None                  # None = el python del venv de <separationEnvDir> (stems.ENV)
 
 
 class AnalysisError(Exception):
@@ -41,7 +42,7 @@ def configure(data_dir, env_dir=None, python=None):
     if python:
         _python = Path(python)
     elif env_dir:
-        _python = Path(env_dir) / "venv" / "bin" / "python"
+        _python = osenv.env_bin(env_dir, "python")
 
 
 def data_dir():
@@ -49,7 +50,7 @@ def data_dir():
 
 
 def python_path():
-    return _python or (stems.ENV / "venv" / "bin" / "python")
+    return _python or osenv.env_bin(stems.ENV, "python")
 
 
 def result_path(track_id):
@@ -118,7 +119,7 @@ def job_status(track_id):
 def _env():
     tmp = data_dir() / "tmp"
     env = {**os.environ, "STEMSHED_DATA": str(data_dir()), "CUDA_VISIBLE_DEVICES": "",
-           "NUMBA_CACHE_DIR": str(tmp / "numba"), "TMPDIR": str(tmp)}
+           "NUMBA_CACHE_DIR": str(tmp / "numba"), **osenv.tmp_env(tmp)}
     for var in ("NUMBA_NUM_THREADS", "OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS"):
         env[var] = "8"
     return env
@@ -129,8 +130,9 @@ def run(track_id, folder, py):
     out.parent.mkdir(parents=True, exist_ok=True)
     (data_dir() / "tmp").mkdir(parents=True, exist_ok=True)
     cmd = [str(py), str(SCRIPT), str(folder), "--out", str(out), "--track-id", track_id]
-    proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True, env=_env())
-    try:  # prioridad baja (sin preexec_fn, que no es seguro con hilos)
+    proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True, env=_env(),
+                            **osenv.sys_flags(low_priority=True))
+    try:  # prioridad baja (sin preexec_fn, que no es seguro con hilos); en Windows va en creationflags
         os.setpriority(os.PRIO_PROCESS, proc.pid, 10)
     except (AttributeError, OSError):
         pass

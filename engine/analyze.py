@@ -17,7 +17,7 @@ import os
 for _var in ("NUMBA_NUM_THREADS", "OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS", "NUMEXPR_NUM_THREADS"):
     os.environ.setdefault(_var, "8")
 os.environ["CUDA_VISIBLE_DEVICES"] = ""
-os.environ.setdefault("NUMBA_CACHE_DIR", os.path.join(os.environ.get("STEMSHED_DATA", "/mnt/plexdata/stemshed"), "tmp", "numba"))
+os.environ.setdefault("NUMBA_CACHE_DIR", os.path.join(os.environ.get("STEMSHED_DATA", os.path.join(__import__("tempfile").gettempdir(), "stemshed")), "tmp", "numba"))
 
 import argparse  # noqa: E402
 import json  # noqa: E402

@@ -10,6 +10,7 @@ si ninguno, el perfil por defecto.
 """
 import json
 import os
+import osenv
 import re
 from pathlib import Path
 
@@ -152,7 +153,7 @@ def save(path, data):
     p.parent.mkdir(parents=True, exist_ok=True)
     tmp = p.with_suffix(".tmp")
     tmp.write_text(json.dumps(clean, ensure_ascii=False, indent=1), encoding="utf-8")
-    os.chmod(tmp, 0o600)
+    osenv.secure(tmp, 0o600)
     tmp.replace(p)
     return clean
 

@@ -4,6 +4,7 @@ Nunca se instala solo. `start()` la dispara un clic explícito. Crea <ENV>/venv 
 y le instala engine/requirements-env.txt (varios GB: la interfaz avisa el tamaño antes).
 """
 import os
+import osenv
 import re
 import subprocess
 import sys
@@ -28,7 +29,7 @@ class EnvError(Exception):
 
 
 def present():
-    return (stems.ENV / "venv" / "bin" / "audio-separator").exists() and (stems.ENV / "venv" / "bin" / "python").exists()
+    return osenv.env_bin(stems.ENV, "audio-separator").exists() and osenv.env_bin(stems.ENV, "python").exists()
 
 
 def status():
@@ -51,13 +52,15 @@ def start():
         try:
             env = stems.ENV
             env.mkdir(parents=True, exist_ok=True)
-            code = subprocess.run([sys.executable, "-m", "venv", str(env / "venv")], capture_output=True, text=True)
+            code = subprocess.run([sys.executable, "-m", "venv", str(env / "venv")], capture_output=True, text=True,
+                                  **osenv.sys_flags())
             if code.returncode != 0:
                 raise EnvError("No se pudo crear el entorno: " + (code.stderr.strip().splitlines() or ["sin salida"])[-1][:200])
-            pip = str(env / "venv" / "bin" / "pip")
+            pip = str(osenv.env_bin(env, "pip"))
             proc = subprocess.Popen([pip, "install", "--no-cache-dir", "--progress-bar", "raw", "--no-deps", "-r", str(REQ)],
                                     stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
-                                    env={**os.environ, "PIP_DISABLE_PIP_VERSION_CHECK": "1", "TMPDIR": str(stems.ROOT / "tmp")})
+                                    env={**os.environ, "PIP_DISABLE_PIP_VERSION_CHECK": "1", **osenv.tmp_env(stems.ROOT / "tmp")},
+                                    **osenv.sys_flags())
             (stems.ROOT / "tmp").mkdir(parents=True, exist_ok=True)
             tail, finished, current, name, last_t, last_b = [], 0, 0, "", time.time(), 0
             for line in proc.stdout:

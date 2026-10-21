@@ -2,6 +2,7 @@
 import hashlib
 import json
 import os
+import osenv
 import subprocess
 import threading
 from concurrent.futures import ThreadPoolExecutor
@@ -17,7 +18,7 @@ _paths = {}  # id -> ruta. Solo el motor conoce las rutas: la interfaz nunca man
 
 
 def file_id(path):
-    return "L" + hashlib.sha1(path.encode()).hexdigest()[:12]
+    return "L" + hashlib.sha1(osenv.norm_key(path).encode()).hexdigest()[:12]
 
 
 def path_for(track_id):
@@ -85,7 +86,7 @@ def _work():
             list(ex.map(one, files))
         settings.CONFIG_DIR.mkdir(parents=True, exist_ok=True)
         INDEX.write_text(json.dumps(new_index))
-        os.chmod(INDEX, 0o600)
+        osenv.secure(INDEX, 0o600)
         _state["tracks"] = tracks
     finally:
         _state["scanning"] = False

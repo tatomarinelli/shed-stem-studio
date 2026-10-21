@@ -1,5 +1,6 @@
 """Detección de hardware y recomendación de modelos (solo lectura)."""
 import os
+import osenv
 import shutil
 import subprocess
 from pathlib import Path
@@ -41,6 +42,11 @@ def _gpus():
 
 
 def _ram():
+    if osenv.WINDOWS:
+        mem = osenv.ram_bytes()
+        if mem:
+            return {"totalGB": round(mem[0] / 1024 ** 3, 1), "availableGB": round(mem[1] / 1024 ** 3, 1)}
+        return {"totalGB": 0, "availableGB": 0}
     info = {}
     for line in Path("/proc/meminfo").read_text().splitlines():
         k, v = line.split(":", 1)
@@ -49,6 +55,8 @@ def _ram():
 
 
 def _cpu():
+    if osenv.WINDOWS:
+        return {"name": osenv.cpu_name(), "threads": os.cpu_count()}
     name = ""
     for line in Path("/proc/cpuinfo").read_text().splitlines():
         if line.startswith("model name"):

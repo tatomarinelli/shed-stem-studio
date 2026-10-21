@@ -5,11 +5,12 @@ login por código de dispositivo y guarda la sesión en la carpeta de Shed Stem 
 cliente de TIDAL ni lee su sesión. Solo lectura sobre TIDAL: nunca escribe en la cuenta.
 """
 import os
+import osenv
 import threading
 import time
 from pathlib import Path
 
-CONFIG_DIR = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "stemshed"
+CONFIG_DIR = osenv.config_dir()
 TIDAL_SESSION = CONFIG_DIR / "tidal-session.json"
 CACHE_SECONDS = 60
 FAV_TRACKS, FAV_ALBUMS, FAV_ARTISTS, PLAYLISTS, PLAYLIST_TRACKS = 200, 100, 100, 60, 100
@@ -164,9 +165,9 @@ def _wait_login(attempt, session):
             if not session.check_login():
                 raise RuntimeError("login incompleto")
             CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-            os.chmod(CONFIG_DIR, 0o700)
+            osenv.secure(CONFIG_DIR, 0o700)
             session.save_session_to_file(TIDAL_SESSION)
-            os.chmod(TIDAL_SESSION, 0o600)
+            osenv.secure(TIDAL_SESSION, 0o600)
             with _lock:
                 if _attempt is not attempt:
                     return

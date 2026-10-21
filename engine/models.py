@@ -1,6 +1,7 @@
 """Modelos locales: qué hay instalado, cuánto pesa y dónde está; y descarga de modelos del catálogo vía Ollama propio."""
 import json
 import os
+import osenv
 import re
 import shutil
 import subprocess
@@ -16,7 +17,7 @@ OWN_URL = "http://127.0.0.1:11500"
 OLLAMA = os.environ.get("STEMSHED_OLLAMA", OWN_URL)
 OLLAMA_MODELS = stems.ROOT / "models" / "ollama"
 _proc = None  # el Ollama que levantó el motor (si lo levantó él)
-CONFIG_DIR = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "stemshed"
+CONFIG_DIR = osenv.config_dir()
 _size_cache = {}
 
 
@@ -50,7 +51,8 @@ def _spawn():
     global _proc
     OLLAMA_MODELS.mkdir(parents=True, exist_ok=True)
     _proc = subprocess.Popen(["ollama", "serve"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                             env={**os.environ, "OLLAMA_MODELS": str(OLLAMA_MODELS), "OLLAMA_HOST": OLLAMA.split("//")[1]})
+                             env={**os.environ, "OLLAMA_MODELS": str(OLLAMA_MODELS), "OLLAMA_HOST": OLLAMA.split("//")[1]},
+                             **osenv.sys_flags())
     for _ in range(40):  # hasta ~8 s
         if ollama_tags() is not None:
             return

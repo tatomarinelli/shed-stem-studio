@@ -6,6 +6,7 @@ Uso personal con la sesión del propio usuario.
 """
 import json
 import os
+import osenv
 import re
 import shutil
 import subprocess
@@ -14,8 +15,8 @@ import threading
 import time
 from pathlib import Path
 
-ROOT = Path(os.environ.get("STEMSHED_DATA", "/mnt/plexdata/stemshed"))  # caché nueva: la vieja es de solo lectura
-ENV = Path(os.environ.get("STEMS_ENV", "/mnt/plexdata/tidal-stems"))     # venv y modelos ya instalados
+ROOT = Path(os.environ.get("STEMSHED_DATA", osenv.default_root("stemshed")))  # caché nueva: la vieja es de solo lectura
+ENV = Path(os.environ.get("STEMS_ENV", osenv.default_root("tidal-stems")))     # venv y modelos ya instalados
 MODEL = "roformer"
 MODEL_FILE = "BS-Roformer-SW.ckpt"
 STEM_NAMES = ["guitar", "bass", "drums", "piano", "vocals", "other"]
@@ -52,7 +53,7 @@ def sep_download_status():
 
 def sep_download_start():
     """Descarga el modelo de separación a la carpeta elegida. Solo la dispara un clic explícito en Ajustes."""
-    py_sep = ENV / "venv" / "bin" / "audio-separator"
+    py_sep = osenv.env_bin(ENV, "audio-separator")
     if not py_sep.exists():
         raise StemsError("Falta el entorno de separación en " + str(ENV))
     with _dl_lock:
@@ -154,7 +155,7 @@ def parse_progress(chunk):
 
 
 def run_separator(cmd, env, progress, on_line=None):
-    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=env)
+    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=env, **osenv.sys_flags())
     tail, last, buffer = [], None, b""
     while True:
         data = proc.stdout.read1(4096)
@@ -211,7 +212,7 @@ def jobs_report():
 
 
 def separate(session, track_id, progress):
-    py, sep = ENV / "venv" / "bin" / "python", ENV / "venv" / "bin" / "audio-separator"
+    py, sep = osenv.env_bin(ENV, "python"), osenv.env_bin(ENV, "audio-separator")
     if not py.exists() or not sep.exists():
         raise StemsError("Falta el entorno de separación en " + str(ENV))
     if not sep_model_present():  # sin esto, audio-separator lo bajaría solo
@@ -239,7 +240,7 @@ def separate(session, track_id, progress):
         progress("separate", 0)
         code, tail = run_separator(
             [str(sep), str(source), "--model_filename", MODEL_FILE, "--model_file_dir", str(MODELS_DIR),
-             "--output_dir", str(out), "--output_format", "FLAC"], {**os.environ, "TMPDIR": str(ROOT / "tmp")}, progress)
+             "--output_dir", str(out), "--output_format", "FLAC"], {**os.environ, **osenv.tmp_env(ROOT / "tmp")}, progress)
         files = sorted(out.glob("*.flac"))
         if code != 0 or not files:
             raise StemsError("La separación falló: " + (tail.strip().splitlines() or ["sin salida"])[-1][:200])

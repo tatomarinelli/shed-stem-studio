@@ -4,6 +4,7 @@ El modelo primero lee las fuentes; el cuestionario complementa. Todo campo es op
 """
 import json
 import os
+import osenv
 import time
 from pathlib import Path
 
@@ -119,7 +120,7 @@ def save(path, patch, geocode=None, now=None, extra=None):
     p.parent.mkdir(parents=True, exist_ok=True)
     tmp = p.with_suffix(".tmp")
     tmp.write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
-    os.chmod(tmp, 0o600)
+    osenv.secure(tmp, 0o600)
     tmp.replace(p)
     return data
 

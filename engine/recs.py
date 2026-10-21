@@ -7,6 +7,7 @@ Adaptado de ideas propias de tidalrecs/daily.py, memory.py y context.py.
 """
 import json
 import os
+import osenv
 import re
 import threading
 import time
@@ -53,7 +54,7 @@ def _write_json(path, data):
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(path.suffix + ".tmp")
     tmp.write_text(json.dumps(data, ensure_ascii=False))
-    os.chmod(tmp, 0o600)
+    osenv.secure(tmp, 0o600)
     tmp.replace(path)
 
 

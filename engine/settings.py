@@ -1,17 +1,18 @@
 """Ajustes del usuario: dónde viven los datos, los modelos y la música. Se guardan en ~/.config/stemshed/settings.json."""
 import json
 import os
+import osenv
 import urllib.parse
 from pathlib import Path
 
-CONFIG_DIR = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "stemshed"
+CONFIG_DIR = osenv.config_dir()
 FILE = CONFIG_DIR / "settings.json"
-FORBIDDEN = ("/etc", "/usr", "/bin", "/sbin", "/lib", "/lib64", "/boot", "/proc", "/sys", "/dev", "/root", "/var/lib")
+FORBIDDEN = osenv.FORBIDDEN
 DEFAULTS = {
-    "dataDir": os.environ.get("STEMSHED_DATA", "/mnt/plexdata/stemshed"),
+    "dataDir": os.environ.get("STEMSHED_DATA", osenv.default_root("stemshed")),
     "ollamaModelsDir": "",            # vacío = <dataDir>/models/ollama
     "separationModelsDir": os.environ.get("STEMSHED_SEP_MODELS", ""),   # vacío = <separationEnvDir>/models
-    "separationEnvDir": os.environ.get("STEMS_ENV", "/mnt/plexdata/tidal-stems"),
+    "separationEnvDir": os.environ.get("STEMS_ENV", osenv.default_root("tidal-stems")),
     "musicFolders": [os.environ["STEMSHED_DEFAULT_MUSIC"]] if os.environ.get("STEMSHED_DEFAULT_MUSIC") else [],
     "llmUrl": os.environ.get("STEMSHED_OLLAMA", "http://127.0.0.1:11500"),
     "audioSources": ["local", "tidal"],   # orden de preferencia para escuchar y separar
@@ -49,9 +50,9 @@ def _abs_dir(value, label):
     if not isinstance(value, str) or not value.strip():
         raise SettingsError(f"{label}: falta la ruta.")
     p = Path(os.path.normpath(value.strip()))
-    if not p.is_absolute():
-        raise SettingsError(f"{label}: la ruta tiene que ser absoluta (empezar con /).")
-    if any(str(p) == f or str(p).startswith(f + "/") for f in FORBIDDEN):
+    if not osenv.is_absolute(str(p)):
+        raise SettingsError(f"{label}: la ruta tiene que ser absoluta ({'por ejemplo D:\\Musica' if osenv.WINDOWS else 'empezar con /'}).")
+    if osenv.is_forbidden(p, FORBIDDEN):
         raise SettingsError(f"{label}: no se pueden usar carpetas del sistema ({p}).")
     return p
 
@@ -78,8 +79,8 @@ def validate(patch):
         out["separationModelsDir"] = _writable_dir(patch["separationModelsDir"], "Carpeta de modelos de separación") if patch["separationModelsDir"] else ""
     if "separationEnvDir" in patch:
         p = _abs_dir(patch["separationEnvDir"], "Entorno de separación")
-        if not (p / "venv" / "bin" / "audio-separator").exists():
-            raise SettingsError(f"Entorno de separación: no encontré venv/bin/audio-separator en {p}.")
+        if not osenv.env_bin(p, "audio-separator").exists():
+            raise SettingsError(f"Entorno de separación: no encontré {osenv.env_rel('audio-separator')} en {p}.")
         out["separationEnvDir"] = str(p)
     if "musicFolders" in patch:
         if not isinstance(patch["musicFolders"], list) or len(patch["musicFolders"]) > 20:
@@ -138,16 +139,30 @@ def save(patch):
     data = load()
     data.update(clean)
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-    os.chmod(CONFIG_DIR, 0o700)
+    osenv.secure(CONFIG_DIR, 0o700)
     FILE.write_text(json.dumps(data, indent=1))
-    os.chmod(FILE, 0o600)
+    osenv.secure(FILE, 0o600)
     return data
+
+
+def _drives():
+    """Windows: las unidades como raíces del selector de carpetas."""
+    import shutil
+    dirs = []
+    for letter in "ABCDEFGHIJKLMNOPQRSTUVWXYZ":
+        root = letter + ":\\"
+        if os.path.exists(root):
+            dirs.append(root)
+    free = shutil.disk_usage(dirs[0]).free if dirs else 0
+    return {"path": "", "parent": None, "dirs": dirs, "freeGB": round(free / 1e9, 1), "drives": True}
 
 
 def list_dirs(path):
     """Subcarpetas de `path` para el selector de carpetas (solo directorios, sin ocultas)."""
+    if osenv.WINDOWS and path in (None, "", "/"):
+        return _drives()
     p = Path(os.path.normpath(path or "/"))
-    if not p.is_absolute() or str(p).startswith(("/proc", "/sys", "/dev")):
+    if not osenv.is_absolute(str(p)) or (not osenv.WINDOWS and str(p).startswith(("/proc", "/sys", "/dev"))):
         raise SettingsError("Ruta no válida.")
     if not p.is_dir():
         raise SettingsError(f"{p} no es una carpeta.")

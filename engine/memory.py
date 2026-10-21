@@ -12,6 +12,7 @@ Todas las funciones de cálculo son puras (reciben fechas y rutas); las de archi
 import json
 import math
 import os
+import osenv
 import re
 import threading
 import time
@@ -282,7 +283,7 @@ class Store:
         self.dir.mkdir(parents=True, exist_ok=True)
         tmp = path.with_suffix(path.suffix + ".tmp")
         tmp.write_text(text, encoding="utf-8")
-        os.chmod(tmp, 0o600)
+        osenv.secure(tmp, 0o600)
         tmp.replace(path)
 
     def load_taste(self, half_life_days=HALF_LIFE_DAYS):
@@ -317,7 +318,7 @@ class Store:
             with self.events_file.open("a", encoding="utf-8") as f:
                 f.write(json.dumps(event, ensure_ascii=False) + "\n")
             if new:
-                os.chmod(self.events_file, 0o600)
+                osenv.secure(self.events_file, 0o600)
 
     def compact(self, now, half_life_days=HALF_LIFE_DAYS):
         """Compacta y guarda. Devuelve (taste, eventos)."""

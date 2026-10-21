@@ -11,6 +11,7 @@ STEMSHED_SAVE_DRYRUN=1: todos los destinos resuelven (lectura) pero NO escriben;
 """
 import json
 import os
+import osenv
 import threading
 import time
 from pathlib import Path
@@ -142,5 +143,5 @@ def save(kind, items, dest_ids, name, log_file, registry=None, dry=None):
         with p.open("a", encoding="utf-8") as f:
             f.write(json.dumps(entry, ensure_ascii=False) + "\n")
         if new:
-            os.chmod(p, 0o600)
+            osenv.secure(p, 0o600)
     return results
