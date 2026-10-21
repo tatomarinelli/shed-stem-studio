@@ -50,7 +50,7 @@ El `runtime/` trae Python 3.13.12 embebido, el motor, la interfaz compilada, `tz
 - **TIDAL en Windows**: el inicio de sesión funciona (probado por el usuario en la 0.0.1); la reproducción en una PC limpia con la 0.0.2 está por confirmar. Nunca se probó desde acá con una cuenta real.
 - **Botones de Cancelar y el paso de ffmpeg en pantalla**: el motor está probado, la interfaz compila y pasa `svelte-check`, pero no se vieron renderizados con un trabajo en curso.
 - **Instalar ffmpeg y Ollama con winget desde el asistente**: el código está probado con procesos simulados; no se ejecutó la instalación real (en esta PC ya estaban).
-- **Una PC limpia, parcialmente**: el usuario confirmó en una PC limpia con la 0.0.3 que reproduce y separa un tema de TIDAL. Cómo se instalaron ffmpeg y Ollama ahí (el asistente con winget, a mano, o ya estaban) y el resto del recorrido no están registrados; en esta notebook ya estaban instalados.
+- **Una PC limpia, parcialmente**: el usuario confirmó en una PC limpia con la 0.0.3 que reproduce y separa un tema de TIDAL. El usuario dice que solo ejecutó el `.exe`: no recuerda haber instalado nada a mano. No se registró qué pasos del asistente siguió ni si ffmpeg y Ollama se instalaron desde el asistente (winget) o ya estaban en esa PC; en esta notebook ya estaban instalados.
 - **NVIDIA/CUDA e Intel en Windows**: no hay hardware para probar. DXGI y los contadores solo se vieron con AMD.
 - **Desinstalador interactivo**: en modo silencioso no toca los datos; no se probó la casilla de borrar datos del modo con pantalla.
 - **Linux real y Docker**: solo los tests unitarios en WSL; no se levantó Docker ni se probó la RTX 5080.
