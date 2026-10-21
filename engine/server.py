@@ -26,6 +26,7 @@ import settings  # noqa: E402
 import sources  # noqa: E402
 import models  # noqa: E402
 import recs  # noqa: E402
+import resources  # noqa: E402
 import stems  # noqa: E402
 import tidal_source as tidal  # noqa: E402
 
@@ -34,6 +35,10 @@ ALLOWED_ORIGINS |= {o.strip().rstrip("/") for o in os.environ.get("STEMSHED_ORIG
 HOST = os.environ.get("STEMSHED_HOST", "127.0.0.1")  # en Docker: 0.0.0.0 dentro del contenedor; el puerto se publica solo en loopback
 ID_RE = re.compile(r"^[A-Za-z0-9-]{1,64}$")
 STEM_ID = r"(\d{1,12}|L[0-9a-f]{12})"
+
+
+resources.configure(paths_fn=lambda: {k: v for k, v in settings.effective().items() if k in ("dataDir", "separationEnvDir", "separationModelsDir", "ollamaModelsDir")},
+                    jobs_fn=services.active_jobs)
 
 
 def apply_settings():
@@ -233,6 +238,12 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(200, firstrun.status())
             if path == "/engine/recs/profile/suggested":
                 return self._send(200, recs.suggested_profile(refresh=urllib.parse.parse_qs(url.query).get("refresh") == ["1"]))
+            if path == "/engine/resources":  # cada pedido cuenta como una suscripción al muestreador
+                try:
+                    since = int(urllib.parse.parse_qs(url.query).get("since", [""])[0])
+                except ValueError:
+                    since = None
+                return self._send(200, resources.SAMPLER.snapshot(since))
             if path == "/engine/services":
                 return self._send(200, services.report())
             if path == "/engine/env/status":
