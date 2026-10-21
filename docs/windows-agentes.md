@@ -33,7 +33,14 @@ Lo marcado "SIN VERIFICAR EN WINDOWS" en el código lo está de verdad: **no afi
 - Cada cambio de plataforma lleva su prueba en `engine/tests` (simulando con `osenv.WINDOWS`) y se verifica también en Linux, donde no debe cambiar nada.
 - Avisar antes de abrir ventanas visibles; las pruebas de interfaz usan Chromium sin ventana (`proto/tools/uicheck.py`).
 - Windows con GPU AMD/Intel: separación en CPU (lenta, sin medir). NVIDIA: torch cu128; hace falta un equipo con NVIDIA para verificar esa ruta.
-- Las preferencias y rutas de la máquina van en `CLAUDE.local.md` (no se versiona). Modelo para Windows: `docs/windows-claude-local.example.md`.
+- Los datos de cada máquina (versión de Windows, GPU, Python, carpeta de datos) se anotan en el registro del final de este archivo, no en archivos locales: así los ve la próxima sesión.
+
+## Equipos de prueba
+(Una fila por equipo: Windows, GPU, RAM, Python, carpeta de datos.)
+
+| Equipo | Windows | GPU | RAM | Python | Datos en |
+|---|---|---|---|---|---|
+| (pendiente) | | | | | |
 
 ## Registro de verificaciones en Windows
 (Agregar fecha, equipo, qué se corrió y el resultado. Vacío hasta la primera corrida.)
