@@ -16,7 +16,7 @@ Nada se descarga solo. Desde **Ajustes** elegís y bajás:
 - **Modelos de recomendación** (Ollama): del catálogo o escribiendo cualquier nombre.
 
 ## Carpetas (dónde se guarda cada cosa)
-Se definen en `docker/.env` y se cambian volviendo a levantar (también se pueden pasar al levantar:
+Por defecto todo cuelga de `STEMSHED_HOME` (`docker/data`); cada carpeta se puede mover por separado. Se definen en `docker/.env` y se cambian volviendo a levantar (también se pueden pasar al levantar:
 `STEMSHED_SEP_MODELS=/ruta docker compose up -d`). Ajustes las muestra con su ruta real del equipo.
 
 | Variable | Qué guarda |

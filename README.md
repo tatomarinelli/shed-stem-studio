@@ -67,7 +67,7 @@ cd docker
 docker compose up -d --build
 ```
 
-No hay nada que configurar: todo queda en `docker/data/` (configuración, datos, modelos y tu música en `docker/data/music`). Para usar otra carpeta o disco, copiá `.env.example` a `.env` y cambiá las rutas.
+No hay nada que configurar: todo queda en `docker/data/` (configuración, datos, modelos y tu música en `docker/data/music`). Para usar otro disco con una sola línea, creá `docker/.env` con `STEMSHED_HOME=/ruta/al/disco/shed` (ver `docker/.env.example` para mover carpetas sueltas). Ojo: el entorno de separación y los modelos suman unos 16 GB.
 
 Abrí <http://127.0.0.1:5173> (o el puerto de `STEMSHED_WEB_PORT`). Se abre el asistente de primeros pasos; también podés hacerlo desde **Ajustes**:
 

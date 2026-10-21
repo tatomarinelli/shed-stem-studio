@@ -4,11 +4,24 @@ import shutil
 import subprocess
 from pathlib import Path
 
-# Catálogo de modelos locales candidatos. `gb` es el peso de la descarga; None = tamaño por confirmar.
-# Nada se descarga solo: la interfaz recomienda y el usuario confirma. Hay que probar cada uno con un cuestionario musical.
+# Catálogo de modelos locales candidatos. `gb` es el peso de la descarga (tamaño según ollama.com/library).
+# Nada se descarga solo: la interfaz recomienda y el usuario confirma.
+# `quiz` = aciertos del cuestionario musical (engine/eval/quiz.py, 46 respuestas); None = sin medir.
+# Solo se marca "recomendado" un modelo que cabe en la GPU Y fue medido (el de mejor `quiz`).
+# Ningún modelo probado es fiable como fuente de datos: proponen candidatos y siempre se verifica (docs/model-comparison.md).
 CATALOG = [
     {"id": "mistral-nemo", "label": "Mistral Nemo 12B", "module": "recomendaciones", "gb": 7.1,
-     "note": "General, multilingüe. Tamaño según una guía de terceros; falta probar cuánto sabe de música."},
+     "license": "Apache 2.0", "tested": True, "quiz": 36, "quizTotal": 46,
+     "note": "Medido: 36/46 del cuestionario, 77 % de candidatos reales, ~106 tok/s. Inventa datos: solo para proponer y verificar."},
+    {"id": "gemma3:12b", "label": "Gemma 3 12B", "module": "recomendaciones", "gb": 8.2,
+     "license": "Gemma Terms of Use (restricciones de uso)", "tested": True, "quiz": 34, "quizTotal": 46,
+     "note": "Medido: 34/46, 78 % de candidatos reales, propone más jazz/soul/funk pero repite. Solo para proponer y verificar."},
+    {"id": "gemma3:27b", "label": "Gemma 3 27B", "module": "recomendaciones", "gb": 17.0,
+     "license": "Gemma Terms of Use (restricciones de uso)", "tested": False, "quiz": None, "quizTotal": 46,
+     "note": "Sin medir: probablemente sepa más por tamaño, pero no está comprobado (en las pruebas más parámetros no garantizaron más acierto)."},
+    {"id": "qwen3:30b", "label": "Qwen3 30B (MoE)", "module": "recomendaciones", "gb": 19.0,
+     "license": "Apache 2.0", "tested": False, "quiz": None, "quizTotal": 46,
+     "note": "Sin medir. Qwen3 14B salió peor que Mistral Nemo en el cuestionario musical."},
 ]
 VRAM_HEADROOM_GB = 2.0   # activaciones y contexto
 SEPARATION_GB = 8.0      # VRAM que usa la separación con RoFormer (estimada): no coexiste con un modelo grande
@@ -75,6 +88,11 @@ def recommend(gpus, disks, target_disk):
             reasons.append(f"Necesita unos {m['gb']:.0f} GB de disco y en {target_disk} quedan {free_disk} GB.")
         out.append({**m, "fits": not reasons, "reasons": reasons,
                     "withSeparation": bool(gpus) and (m["gb"] or 0) + SEPARATION_GB + VRAM_HEADROOM_GB <= free_vram})
+    best = max((m for m in out if m["fits"] and m.get("tested")), key=lambda m: m.get("quiz") or 0, default=None)
+    for m in out:
+        m["recommended"] = m is best
+        if m["fits"] and not m.get("tested"):
+            m["reasons"] = m["reasons"] + ["Cabe en tu GPU, pero todavía no se midió cuánto sabe de música."]
     return out
 
 

@@ -13,10 +13,10 @@ services:
     restart: "no"
     command: ["sh", "-c", "mkdir -p /models/separation && chown ${STEMSHED_UID:-1000}:${STEMSHED_GID:-1000} /config /data /env /models/separation"]
     volumes:
-      - ${STEMSHED_CONFIG:-./data/config}:/config
-      - ${STEMSHED_DATA:-./data/stemshed}:/data
-      - ${STEMSHED_ENV:-./data/env}:/env
-      - ${STEMSHED_SEP_MODELS:-./data/models/separation}:/models/separation
+      - ${STEMSHED_CONFIG:-${STEMSHED_HOME:-./data}/config}:/config
+      - ${STEMSHED_DATA:-${STEMSHED_HOME:-./data}/stemshed}:/data
+      - ${STEMSHED_ENV:-${STEMSHED_HOME:-./data}/env}:/env
+      - ${STEMSHED_SEP_MODELS:-${STEMSHED_HOME:-./data}/models/separation}:/models/separation
 
   engine:
     build: { context: .., dockerfile: docker/Dockerfile.engine }
@@ -28,17 +28,17 @@ services:
       STEMSHED_DEFAULT_MUSIC: /music
       STEMSHED_NO_SCHEDULER: ${STEMSHED_NO_SCHEDULER:-}
       # Dónde están las carpetas en tu equipo (Ajustes las muestra; se cambian en docker/.env y se vuelve a levantar).
-      STEMSHED_HOST_DATA: ${STEMSHED_DATA:-./data/stemshed}
-      STEMSHED_HOST_ENV: ${STEMSHED_ENV:-./data/env}
-      STEMSHED_HOST_SEP_MODELS: ${STEMSHED_SEP_MODELS:-./data/models/separation}
-      STEMSHED_HOST_LLM_MODELS: ${STEMSHED_LLM_MODELS:-./data/models/ollama}
+      STEMSHED_HOST_DATA: ${STEMSHED_DATA:-${STEMSHED_HOME:-./data}/stemshed}
+      STEMSHED_HOST_ENV: ${STEMSHED_ENV:-${STEMSHED_HOME:-./data}/env}
+      STEMSHED_HOST_SEP_MODELS: ${STEMSHED_SEP_MODELS:-${STEMSHED_HOME:-./data}/models/separation}
+      STEMSHED_HOST_LLM_MODELS: ${STEMSHED_LLM_MODELS:-${STEMSHED_HOME:-./data}/models/ollama}
       STEMSHED_ORIGINS: ${STEMSHED_ORIGINS:-http://127.0.0.1:5173}
     volumes:
-      - ${STEMSHED_CONFIG:-./data/config}:/config
-      - ${STEMSHED_DATA:-./data/stemshed}:/data
-      - ${STEMSHED_ENV:-./data/env}:/env                 # entorno de separación (se instala desde Ajustes)
-      - ${STEMSHED_SEP_MODELS:-./data/models/separation}:/models/separation
-      - ${STEMSHED_MUSIC:-./data/music}:/music:ro
+      - ${STEMSHED_CONFIG:-${STEMSHED_HOME:-./data}/config}:/config
+      - ${STEMSHED_DATA:-${STEMSHED_HOME:-./data}/stemshed}:/data
+      - ${STEMSHED_ENV:-${STEMSHED_HOME:-./data}/env}:/env                 # entorno de separación (se instala desde Ajustes)
+      - ${STEMSHED_SEP_MODELS:-${STEMSHED_HOME:-./data}/models/separation}:/models/separation
+      - ${STEMSHED_MUSIC:-${STEMSHED_HOME:-./data}/music}:/music:ro
     devices:
       - nvidia.com/gpu=all          # CDI: requiere nvidia-container-toolkit en el host
     depends_on:
@@ -54,7 +54,7 @@ services:
     environment:
       OLLAMA_HOST: 0.0.0.0:11434
     volumes:
-      - ${STEMSHED_LLM_MODELS:-./data/models/ollama}:/root/.ollama/models
+      - ${STEMSHED_LLM_MODELS:-${STEMSHED_HOME:-./data}/models/ollama}:/root/.ollama/models
     devices:
       - nvidia.com/gpu=all
     healthcheck:
