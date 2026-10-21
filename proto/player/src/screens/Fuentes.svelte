@@ -5,6 +5,7 @@
   import { settings } from '../lib/settings.svelte';
   import { music } from '../lib/music.svelte';
   import { toast } from '../lib/toast.svelte';
+  import TidalLogin from '../components/TidalLogin.svelte';
   import FolderPicker from '../components/FolderPicker.svelte';
 
   let picking = $state(false);
@@ -63,13 +64,7 @@
     {#if tidal.state === 'idle' || tidal.state === 'connecting'}
       <p class="muted">Conectando…</p>
     {:else if tidal.state === 'logging_in'}
-      <p>Abrí el link, iniciá sesión y confirmá este código:</p>
-      <p class="code num">{tidal.loginCode}</p>
-      <div class="row">
-        <a class="btn" href={tidal.loginUrl} target="_blank" rel="noopener noreferrer">Abrir TIDAL</a>
-        <button onclick={() => tidal.cancelLogin()}>Cancelar</button>
-      </div>
-      <p class="muted">Se actualiza sola al autorizar. El código vence a los 5 minutos.</p>
+      <TidalLogin />
     {:else if tidal.state === 'no_engine'}
       <p>{tidal.message}</p>
       <div class="row"><button class="primary" onclick={() => { tidal.state = 'idle'; tidal.connect(); }}>Reintentar</button></div>
@@ -113,10 +108,8 @@
   dl { display: grid; grid-template-columns: 1fr auto; gap: 6px 16px; margin: 0; }
   dt { color: var(--muted); } dd { margin: 0; font-weight: 600; text-align: right; }
   .err { color: var(--loop); font-size: 13.5px; }
-  .code { font-size: 40px; font-weight: 700; letter-spacing: 0.12em; }
   .row { display: flex; gap: 8px; }
-  .primary, .btn { background: var(--text); color: var(--bg); border-color: var(--text); font-weight: 600; }
-  .btn { text-decoration: none; padding: 7px 14px; border-radius: 9px; border: 1px solid var(--text); }
+  .primary { background: var(--text); color: var(--bg); border-color: var(--text); font-weight: 600; }
   .foot { margin: 0; font-size: 14px; }
   .foot a { color: var(--text); }
 </style>
