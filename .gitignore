@@ -26,3 +26,10 @@ docs/agent-notes/model-eval-raw/
 
 # Copias de trabajo de los agentes
 .claude/
+
+# Versión de Windows: caché de descargas, runtime armado, resultados y compilación de la cáscara
+windows/build/cache/
+windows/build/stage/
+windows/build/out/
+windows/shell/src-tauri/target/
+windows/shell/src-tauri/gen/
