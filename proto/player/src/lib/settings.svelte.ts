@@ -1,17 +1,23 @@
 export interface ModelInfo { label: string; where: string; path: string; present: boolean; bytes: number }
 export interface StorageItem { label: string; path: string; bytes: number; writable: boolean }
 export interface StorageReport {
-  env: { present: boolean; path: string; approxGb: number; step?: string };
+  env: { present: boolean; path: string; approxGb: number; step?: string; backend?: string | null };
   separation: ModelInfo[];
   separationInUse: string;
   recommendations: { provider: string; running: boolean; path: string; inUse: string | null; models: ModelInfo[] };
   storage: StorageItem[];
 }
-export interface Gpu { name: string; vramGB: number; usedGB: number }
+export interface Gpu { name: string; vramGB: number; usedGB: number | null; vendor?: string; accel?: string | null; llmAccel?: string | null; integrated?: boolean }
 export interface Disk { path: string; totalGB: number; freeGB: number; usedPct: number }
-export interface Candidate { id: string; label: string; module: string; gb: number | null; note: string; fits: boolean; reasons: string[]; withSeparation: boolean }
+export interface Candidate { id: string; label: string; module: string; gb: number | null; note: string; fits: boolean; reasons: string[]; withSeparation: boolean; partial?: boolean }
 export interface HardwareReport {
   gpus: Gpu[]; ram: { totalGB: number; availableGB: number }; cpu: { name: string; threads: number }; disks: Disk[]; models: Candidate[];
+}
+export interface BackendOption { id: string; label: string; approxGb: number | null; installable: boolean; compatible: boolean; requires: string | null; recommended: boolean; verified: boolean; note: string }
+export interface BackendReport { recommended: string; reason: string; gpu: string | null; options: BackendOption[] }
+export interface LlmServer {
+  installed: boolean; running: boolean; canInstall: boolean; approxGb: number;
+  accel: 'cuda' | 'vulkan' | 'cpu'; gpu: string | null; job: Pull;
 }
 export interface Config { audioSources: string[]; dataDir: string; ollamaModelsDir: string; separationModelsDir: string; separationEnvDir: string; musicFolders: string[]; llmUrl: string; llmModel: string }
 export interface AudioSource { id: 'local' | 'tidal'; label: string; enabled: boolean; available: boolean; detail: string }
@@ -133,9 +139,45 @@ class Settings {
   #envTimer = 0;
   envPull = $state<Pull>({ state: 'idle' });
 
+  llm = $state<LlmServer | null>(null);
+  #llmTimer = 0;
+
+  async loadLlm() {
+    try {
+      const res = await fetch('/engine/llm/status');
+      if (res.ok) this.llm = await res.json();
+    } catch { /* sin motor: el estado general lo informa */ }
+  }
+
+  async installLlm() {
+    const res = await fetch('/engine/llm/install', { method: 'POST' });
+    const body = await res.json();
+    if (!res.ok) { if (this.llm) this.llm = { ...this.llm, job: { state: 'error', message: body.message } }; return; }
+    if (this.llm) this.llm = { ...this.llm, job: body };
+    window.clearInterval(this.#llmTimer);
+    this.#llmTimer = window.setInterval(async () => {
+      await this.loadLlm();
+      if (this.llm?.job.state === 'running') return;
+      window.clearInterval(this.#llmTimer);
+      await this.load();
+    }, 2000);
+  }
+
+  backends = $state<BackendReport | null>(null);
+  /** Motor elegido por el usuario; null = el recomendado. */
+  backend = $state<string | null>(null);
+
+  async loadBackends() {
+    try {
+      const res = await fetch('/engine/backends');
+      if (res.ok) this.backends = await res.json();
+    } catch { /* sin motor: el estado general lo informa */ }
+  }
+
   async installEnv() {
     this.envPull = { state: 'running', percent: 0 };
-    const res = await fetch('/engine/env/install', { method: 'POST' });
+    const res = await fetch('/engine/env/install', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(this.backend ? { backend: this.backend } : {}) });
     const body = await res.json();
     if (!res.ok) { this.envPull = { state: 'error', message: body.message }; return; }
     window.clearInterval(this.#envTimer);

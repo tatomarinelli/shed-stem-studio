@@ -11,6 +11,8 @@
   import FolderPicker from '../components/FolderPicker.svelte';
   import ProfileForm from '../components/recs/ProfileForm.svelte';
   import PresetWizard from '../components/recs/PresetWizard.svelte';
+  import BackendPicker from '../components/BackendPicker.svelte';
+  import LlmServer from '../components/LlmServer.svelte';
 
   const hw = $derived(settings.hardware);
   const eff = $derived(settings.effective);
@@ -42,9 +44,12 @@
     else await settings.save({ [picking.key]: path } as Partial<Config>);
   }
   const removeFolder = (f: string) => settings.save({ musicFolders: settings.config!.musicFolders.filter(x => x !== f) });
+  // Rutas de Linux ("/mnt/x") y de Windows ("C:\Users\x", sin distinguir mayúsculas): se comparan con "/" como separador.
+  const norm = (p: string) => { const q = p.replace(/\\/g, '/').replace(/\/+$/, ''); return /^[a-z]:/i.test(q) ? q.toLowerCase() : q; };
   const freeFor = (path?: string) => {
     if (!path || !hw) return null;
-    const d = [...hw.disks].filter(x => path === x.path || path.startsWith(x.path === '/' ? '/' : x.path + '/')).sort((a, b) => b.path.length - a.path.length)[0];
+    const p = norm(path);
+    const d = [...hw.disks].filter(x => { const r = norm(x.path); return p === r || p.startsWith(r + '/'); }).sort((a, b) => b.path.length - a.path.length)[0];
     return d ? d.freeGB : null;
   };
   const envFree = $derived(freeFor(eff?.separationEnvDir));
@@ -156,18 +161,20 @@
             Disco: {envFree ?? '?'} GB libres
           </span>
         {:else}<span class="muted">Midiendo tu equipo…</span>{/if}
-        {#if hw && !hw.gpus.length}<span class="warn" role="alert">Sin placa de video la separación va a ser muy lenta. Podés seguir igual.</span>{/if}
+        {#if hw && !hw.gpus.length}<span class="warn" role="alert">Sin placa de video: todo va por CPU, lento.</span>
+        {:else if hw && !hw.gpus.some(g => g.accel)}<span class="warn" role="alert">Separación por CPU: lenta.</span>{/if}
       </div>
 
       {#if openError}<p class="warn" role="alert">{openError}</p>{/if}
       <div class="job col">
         <div class="ttl"><Icon name="chip" /><b>Entorno de separación</b> <span class="muted">≈ 8 GB en disco</span></div>
-        <p class="info">Los programas que hacen correr la IA en tu placa de video (PyTorch y las bibliotecas de NVIDIA). Se instala una sola vez; es lo que más pesa.</p>
+        <p class="info">Lo que hace correr la IA. Se instala una vez; es lo más pesado.</p>
         <p class="where"><Icon name="carpeta" size={16} /><span class="path">{pathOf('separationEnvDir')}</span>
           {#if !inDocker}<button class="ghost" onclick={() => openDir('separationEnvDir')}>Abrir carpeta</button>{/if}</p>
-        {#if st?.env.present}<span class="ok">Instalado</span>
+        {#if st?.env.present}<span class="ok">Instalado{st.env.backend ? ` · ${st.env.backend === 'cuda' ? 'NVIDIA (CUDA)' : st.env.backend === 'cpu' ? 'procesador' : st.env.backend}` : ''}</span>
         {:else if settings.envPull.state === 'running'}<Progress job={settings.envPull} verb="Instalando" />
         {:else}
+          <BackendPicker />
           <button class="primary" disabled={envBlocked} onclick={() => settings.installEnv()}>Instalar</button>
           {#if envBlocked}<span class="warn" role="alert">Necesita unos 10 GB y quedan {envFree} GB acá. Cambiá la carpeta en el paso anterior.</span>{/if}
           {#if settings.envPull.state === 'error'}<span class="warn" role="alert">{settings.envPull.message}</span>{/if}
@@ -189,6 +196,7 @@
       </div>
 
       <div class="job col">
+        <LlmServer />
         {#if chat?.installed?.length}
           <div class="ttl"><Icon name="estrella" /><b>Modelo de recomendaciones</b> <span class="muted">{chat.installed[0]}</span></div>
           <p class="info">El modelo de lenguaje que propone discos según tus gustos. Corre en tu equipo.</p>
@@ -197,8 +205,8 @@
           <span class="ok">Instalado</span>
         {:else}
           <div class="ttl"><Icon name="estrella" /><b>Modelo de recomendaciones</b>
-            {#if candidate}<span class="muted">{candidate.label} · {candidate.gb ? `≈ ${candidate.gb} GB en disco · ≈ ${Math.ceil(candidate.gb + 2)} GB de placa de video` : ''}</span> <span class="reco">Recomendado</span>{/if}</div>
-          <p class="info">El modelo de lenguaje que propone discos según tus gustos. Corre en tu equipo y tiene que entrar en la memoria de tu placa de video.</p>
+            {#if candidate}<span class="muted">{candidate.label} · {candidate.gb ? `≈ ${candidate.gb} GB en disco · ≈ ${Math.ceil(candidate.gb + 2)} GB de placa de video` : ''}</span> <span class="reco">Recomendado</span>{#if candidate.partial} <span class="muted">· parte en CPU</span>{/if}{/if}</div>
+          <p class="info">Propone discos según tus gustos. Corre en tu equipo.</p>
           <p class="where"><Icon name="carpeta" size={16} /><span class="path">{pathOf('ollamaModelsDir')}</span></p>
           {#if candidate}
             {#if settings.pulls[candidate.id]?.state === 'running'}<Progress job={settings.pulls[candidate.id]} />
@@ -208,7 +216,7 @@
               {#if settings.pulls[candidate.id]?.state === 'error'}<span class="warn" role="alert">{settings.pulls[candidate.id].message}</span>{/if}
             {/if}
           {/if}
-          {#if candidate && hw?.gpus.length && !candidate.withSeparation}
+          {#if candidate && hw?.gpus.some(g => g.accel) && !candidate.withSeparation}
             <p class="info">Con tu placa de video no entran a la vez: la separación y las recomendaciones se turnan solas.</p>
           {/if}
           <details class="other">

@@ -4,6 +4,8 @@
   import { tidal } from '../lib/tidal.svelte';
   import FolderPicker from '../components/FolderPicker.svelte';
   import Progress from '../components/Progress.svelte';
+  import BackendPicker from '../components/BackendPicker.svelte';
+  import LlmServer from '../components/LlmServer.svelte';
   import { setup } from '../lib/setup.svelte';
   import Icon from '../components/Icon.svelte';
   import ResourceMonitor from '../components/ResourceMonitor.svelte';
@@ -38,7 +40,7 @@
   // Recomendados que todavía no están instalados: se ofrecen como una fila más del módulo.
   const toInstall = $derived(hw?.models.filter(c => c.fits && !st?.recommendations.models.some(m => base(m.label) === c.id)) ?? []);
   // Separación: RoFormer si la GPU tiene al menos 8 GB (estimación del uso con RoFormer, sin medir con precisión); si no, Demucs.
-  const sepRecommended = $derived((hw?.gpus[0]?.vramGB ?? 0) >= 8 ? 'RoFormer (BS-Roformer-SW)' : 'Demucs 6 stems (htdemucs_6s)');
+  const sepRecommended = $derived((hw?.gpus.find(g => g.accel)?.vramGB ?? 0) >= 8 ? 'RoFormer (BS-Roformer-SW)' : 'Demucs 6 stems (htdemucs_6s)');
 
   // Selector de carpetas: qué ajuste se está eligiendo.
   type PathKey = 'dataDir' | 'ollamaModelsDir' | 'separationModelsDir' | 'separationEnvDir';
@@ -129,6 +131,7 @@
             {#if settings.envPull.state === 'running'}
               <Progress job={settings.envPull} verb="Instalando" />
             {:else}
+              <BackendPicker />
               <button class="primary" onclick={() => settings.installEnv()}>Instalar</button>
               {#if settings.envPull.state === 'error'}<span class="warn" role="alert">{settings.envPull.message}</span>{/if}
             {/if}
@@ -159,6 +162,7 @@
 
     <div class="module">
       <h4>Recomendaciones</h4>
+      <LlmServer />
       <ul class="models">
         {#each st.recommendations.models as m (m.label)}
           {@const inUse = m.label === st.recommendations.inUse}
@@ -224,9 +228,9 @@
     <h3>Tu equipo</h3>
     <dl class="hw">
       {#each hw.gpus as g (g.name)}
-        <dt>Placa de video</dt><dd>{g.name}, {g.vramGB} GB de memoria</dd>
+        <dt>Placa de video</dt><dd>{g.name}, {g.vramGB} GB de memoria{#if g.accel === null}<span class="muted"> · separación por CPU</span>{/if}</dd>
       {:else}
-        <dt>Placa de video</dt><dd class="warn">No se detectó una GPU de NVIDIA: la separación y los modelos irían a CPU, mucho más lento.</dd>
+        <dt>Placa de video</dt><dd class="warn">No se detectó una placa de video: la separación y los modelos irían a CPU, mucho más lento.</dd>
       {/each}
       <dt>Procesador</dt><dd>{hw.cpu.name}, {hw.cpu.threads} hilos</dd>
       <dt>Memoria</dt><dd>{hw.ram.totalGB} GB ({hw.ram.availableGB} GB libres)</dd>

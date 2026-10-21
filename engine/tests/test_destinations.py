@@ -7,6 +7,7 @@ import unittest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 import destinations as D  # noqa: E402
+from perms import assert_private  # noqa: E402
 
 
 class Fake(D.Destination):
@@ -53,7 +54,7 @@ class Save(unittest.TestCase):
         self.assertEqual(self.a.writes, ["X"])
         log = [json.loads(x) for x in open(self.log)]
         self.assertEqual(len(log), 1)
-        self.assertEqual(oct(os.stat(self.log).st_mode & 0o777), "0o600")
+        assert_private(self, self.log)
 
     def test_dry_run_never_writes(self):
         r = D.save("album", [{"artist": "Y", "album": "X"}], ["a"], None, self.log, self.reg, dry=True)

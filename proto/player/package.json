@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "engine": "python3 ../../engine/server.py 8770",
-    "worklet": "esbuild src/engine/worklet.js --bundle --format=esm --outfile=public/worklet.js && cp node_modules/rubberband-wasm/dist/rubberband.wasm public/rubberband.wasm",
+    "worklet": "esbuild src/engine/worklet.js --bundle --format=esm --outfile=public/worklet.js && node -e \"fs.copyFileSync('node_modules/rubberband-wasm/dist/rubberband.wasm','public/rubberband.wasm')\"",
     "dev": "npm run worklet && vite",
     "build": "npm run worklet && vite build",
     "check": "svelte-check --tsconfig ./tsconfig.json"

@@ -15,12 +15,14 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import analysis  # noqa: E402
+import backends  # noqa: E402
 import art  # noqa: E402
 import catalog  # noqa: E402
 import destinations  # noqa: E402
 import envsetup  # noqa: E402
 import hardware  # noqa: E402
 import library  # noqa: E402
+import llmserver  # noqa: E402
 import services  # noqa: E402
 import firstrun  # noqa: E402
 import settings  # noqa: E402
@@ -30,6 +32,7 @@ import recs  # noqa: E402
 import resources  # noqa: E402
 import stems  # noqa: E402
 import tidal_source as tidal  # noqa: E402
+import webui  # noqa: E402
 
 ALLOWED_ORIGINS = {"http://127.0.0.1:5173", "http://localhost:5173"}
 ALLOWED_ORIGINS |= {o.strip().rstrip("/") for o in os.environ.get("STEMSHED_ORIGINS", "").split(",") if o.strip()}  # p. ej. el sitio publicado
@@ -63,6 +66,23 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header("Access-Control-Allow-Origin", origin)
         self.end_headers()
         self.wfile.write(body)
+
+    def _static(self, path):
+        """La interfaz construida, si hay una. True si respondió."""
+        ui = webui.root()
+        f = webui.resolve(ui, urllib.parse.unquote(path)) if ui else None
+        if not f:
+            return False
+        mime, headers = webui.headers_for(f)
+        body = f.read_bytes()
+        self.send_response(200)
+        self.send_header("Content-Type", mime)
+        self.send_header("Content-Length", str(len(body)))
+        for k, v in headers.items():
+            self.send_header(k, v)
+        self.end_headers()
+        self.wfile.write(body)
+        return True
 
     def _range_headers(self, mime, length, start, end, total):
         partial = self.headers.get("Range") is not None
@@ -251,6 +271,10 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(200, services.report())
             if path == "/engine/env/status":
                 return self._send(200, envsetup.status())
+            if path == "/engine/llm/status":
+                return self._send(200, llmserver.status())
+            if path == "/engine/backends":
+                return self._send(200, backends.report(hardware._gpus()))
             if path == "/engine/models/separation/status":
                 return self._send(200, stems.sep_download_status())
             m = re.fullmatch(r"/engine/models/([A-Za-z0-9._:/-]{1,100})/status", urllib.parse.unquote(path))
@@ -265,8 +289,10 @@ class Handler(BaseHTTPRequestHandler):
             m = re.fullmatch(r"/engine/tidal/playlists/([^/]+)", path)
             if m and ID_RE.match(m.group(1)):
                 return self._send(200, tidal.playlist_tracks(m.group(1)))
+            if not path.startswith("/engine/") and self._static(path):
+                return
             return self._send(404, {"error": "not_found", "message": "Ruta desconocida"})
-        except (stems.StemsError, analysis.AnalysisError, envsetup.EnvError) as e:
+        except (stems.StemsError, analysis.AnalysisError, envsetup.EnvError, llmserver.LlmServerError) as e:
             return self._send(409, {"error": "stems", "message": str(e)})
         except tidal.SourceError as e:
             return self._send(409, {"error": e.code, "message": e.message})
@@ -315,7 +341,13 @@ class Handler(BaseHTTPRequestHandler):
                 body = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))) or b"{}")
                 return self._send(200, services.open_folder(str(body.get("key", ""))))
             if path == "/engine/env/install":
-                return self._send(200, envsetup.start())
+                body = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))) or b"{}")
+                choice = body.get("backend")
+                if choice is not None and not (isinstance(choice, str) and ID_RE.match(choice)):
+                    return self._send(400, {"error": "bad_request", "message": "Motor de separación inválido."})
+                return self._send(200, envsetup.start(choice))
+            if path == "/engine/llm/install":
+                return self._send(200, llmserver.install_start())
             if path == "/engine/models/separation/download":
                 return self._send(200, stems.sep_download_start())
             m = re.fullmatch(r"/engine/models/([A-Za-z0-9._:/-]{1,100})/pull", urllib.parse.unquote(path))
@@ -372,7 +404,7 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(404, {"error": "not_found", "message": "Ruta desconocida"})
         except settings.SettingsError as e:
             return self._send(400, {"error": "settings", "message": str(e)})
-        except (stems.StemsError, analysis.AnalysisError, envsetup.EnvError, services.OpenError, ValueError) as e:
+        except (stems.StemsError, analysis.AnalysisError, envsetup.EnvError, llmserver.LlmServerError, services.OpenError, ValueError) as e:
             return self._send(409, {"error": "stems", "message": str(e)})
         except tidal.SourceError as e:
             return self._send(409, {"error": e.code, "message": e.message})
@@ -392,6 +424,7 @@ class Handler(BaseHTTPRequestHandler):
 if __name__ == "__main__":
     port = int(sys.argv[1]) if len(sys.argv) > 1 else 8770
     osenv.kill_children_on_exit()  # Windows: los procesos hijos mueren con el motor
+    osenv.ensure_ffmpeg_on_path()  # audio-separator lo necesita; en Windows lo instala winget fuera del PATH de este proceso
     apply_settings()
     models.ensure_ollama()
     catalog.load_state()
@@ -402,7 +435,7 @@ if __name__ == "__main__":
         recs.import_seed()
     except Exception as e:  # una semilla rota no impide arrancar
         print(f"No se pudo importar la semilla del perfil: {type(e).__name__}", flush=True)
-    if port == 8770:  # la tarea automática solo corre en el motor principal (no en motores de prueba)
+    if port == 8770 or os.environ.get("STEMSHED_SCHEDULER") == "1":  # la tarea automática solo corre en el motor principal (la cáscara de escritorio lo pide si usa otro puerto)
         recs.start_scheduler()
     print(f"Motor de Shed Stem Studio en http://{HOST}:{port}", flush=True)
     httpd = ThreadingHTTPServer((HOST, port), Handler)

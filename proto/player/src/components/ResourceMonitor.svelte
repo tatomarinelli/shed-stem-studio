@@ -63,7 +63,7 @@
           <div class="bar" role="progressbar" aria-valuenow={g.memTotalBytes ? Math.round((100 * (g.memUsedBytes ?? 0)) / g.memTotalBytes) : 0} aria-valuemin="0" aria-valuemax="100" aria-label="Memoria de video de {g.name}"><i style="width:{g.memTotalBytes ? (100 * (g.memUsedBytes ?? 0)) / g.memTotalBytes : 0}%"></i></div>
           <span class="num">{gb(g.memUsedBytes)} / {gb(g.memTotalBytes)}</span>
           <span class="muted num">{num(g.tempC, '°C')} · {g.powerW == null ? 'potencia —' : `${Math.round(g.powerW)} W`}</span>
-          {#if g.unverified}<span class="muted note">Lectura de AMD sin verificar en hardware real.</span>{/if}
+          {#if g.unverified}<span class="muted note">Lectura sin verificar en este hardware.</span>{/if}
         </div>
       {/each}
     {:else}

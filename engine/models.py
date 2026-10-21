@@ -50,7 +50,7 @@ def _ollama(path, body=None, timeout=3):
 def _spawn():
     global _proc
     OLLAMA_MODELS.mkdir(parents=True, exist_ok=True)
-    _proc = subprocess.Popen(["ollama", "serve"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+    _proc = subprocess.Popen([osenv.find_ollama() or "ollama", "serve"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                              env={**os.environ, "OLLAMA_MODELS": str(OLLAMA_MODELS), "OLLAMA_HOST": OLLAMA.split("//")[1]},
                              **osenv.sys_flags())
     for _ in range(40):  # hasta ~8 s
@@ -61,7 +61,7 @@ def _spawn():
 
 def ensure_ollama():
     """Levanta el Ollama propio si no responde. Solo para la dirección propia; un servidor externo se respeta."""
-    if OLLAMA == OWN_URL and ollama_tags() is None and shutil.which("ollama"):
+    if OLLAMA == OWN_URL and ollama_tags() is None and osenv.find_ollama():
         _spawn()
 
 

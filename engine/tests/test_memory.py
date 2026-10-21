@@ -11,6 +11,7 @@ from pathlib import Path
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 import memory as M  # noqa: E402
+from perms import assert_private  # noqa: E402
 
 DAY = 86400.0
 T0 = 1_700_000_000.0  # fecha fija: nada depende del reloj
@@ -146,8 +147,8 @@ class Compaction(unittest.TestCase):
             taste, keep = st.compact(T0 + 420 * DAY)
             self.assertEqual(len(st.load_events()), len(keep))
             self.assertEqual(json.loads(Path(d, "taste.json").read_text())["artists"], taste["artists"])
-            self.assertEqual(oct(os.stat(os.path.join(d, "taste.json")).st_mode & 0o777), "0o600")
-            self.assertEqual(oct(os.stat(os.path.join(d, "events.jsonl")).st_mode & 0o777), "0o600")
+            assert_private(self, os.path.join(d, "taste.json"))
+            assert_private(self, os.path.join(d, "events.jsonl"))
 
 
 class Summary(unittest.TestCase):

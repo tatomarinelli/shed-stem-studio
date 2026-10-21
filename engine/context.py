@@ -1,6 +1,7 @@
 """El momento de la recomendación: se calcula en código (nunca lo adivina el modelo). Opt-in desde el perfil."""
 from datetime import datetime
-from zoneinfo import ZoneInfo
+
+import osenv
 
 WEEKDAYS = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"]
 WMO = [({0}, "despejado"), ({1}, "mayormente despejado"), ({2}, "parcialmente nublado"), ({3}, "nublado"),
@@ -46,11 +47,7 @@ def build(profile, now_ts, weather=None):
     if not profile.get("useTime") and not (profile.get("useWeather") and profile.get("geo")):
         return None
     geo = profile.get("geo") or {}
-    tz = None
-    try:
-        tz = ZoneInfo(geo["timezone"]) if geo.get("timezone") else None
-    except Exception:
-        tz = None
+    tz = osenv.tzinfo(geo.get("timezone"))
     now = datetime.fromtimestamp(now_ts, tz) if tz else datetime.fromtimestamp(now_ts).astimezone()
     ctx = {}
     if profile.get("useTime"):

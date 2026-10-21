@@ -337,3 +337,40 @@ class WindowsSimulated(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class WindowsGpus(unittest.TestCase):
+    """Placas en Windows (DXGI + contadores): se simulan los datos, nada de esto toca el sistema."""
+    LUID_A, LUID_B = "0x00000000_0x00011727", "0x00000000_0x000138EA"
+
+    def test_aggregate_toma_el_motor_mas_cargado_y_suma_procesos(self):
+        eng = [("pid_10_luid_0x00000000_0x00011727_phys_0_eng_0_engtype_3D", 30.0),
+               ("pid_11_luid_0x00000000_0x00011727_phys_0_eng_0_engtype_3D", 25.0),
+               ("pid_10_luid_0x00000000_0x00011727_phys_0_eng_1_engtype_Compute", 40.0),
+               ("pid_12_luid_0x00000000_0x000138EA_phys_0_eng_0_engtype_3D", 150.0),
+               ("basura", 5.0)]
+        mem = [("luid_0x00000000_0x00011727_phys_0", 1024.0), ("luid_0x00000000_0x000138EA_phys_0", None)]
+        got = resources.aggregate_gpu_counters(eng, mem)
+        self.assertEqual(got[self.LUID_A], (55.0, 1024))     # 3D: 30 + 25 > Compute: 40
+        self.assertEqual(got[self.LUID_B], (100.0, None))    # nunca pasa de 100
+
+    def test_windows_gpus_une_placas_y_contadores(self):
+        ad = [{"name": "AMD Radeon RX 6700S", "vendor": "amd", "vramBytes": 8 * 1024**3, "integrated": False, "luid": self.LUID_A},
+              {"name": "Intel UHD", "vendor": "intel", "vramBytes": 128 * 1024**2, "integrated": True, "luid": self.LUID_B}]
+        g = resources.windows_gpus(ad, {self.LUID_A: (12.5, 3 * 1024**3)})
+        self.assertEqual((g[0]["utilPercent"], g[0]["memUsedBytes"], g[0]["memTotalBytes"], g[0]["unverified"]), (12.5, 3 * 1024**3, 8 * 1024**3, False))
+        self.assertEqual((g[1]["utilPercent"], g[1]["memUsedBytes"], g[1]["unverified"], g[1]["integrated"]), (None, None, True, True))
+
+    def test_el_muestreador_usa_la_plataforma_si_no_hay_nvidia_ni_sysfs(self):
+        class P(LinuxPlatform):
+            def gpus(self):
+                return [{"index": 0, "name": "X", "vendor": "amd", "utilPercent": 1.0, "memUsedBytes": 1, "memTotalBytes": 2,
+                         "tempC": None, "powerW": None, "unverified": False}]
+        with tempfile.TemporaryDirectory() as d:
+            fake_proc(d)
+            s = Sampler(platform=P(d, clk_tck=100), smi_path=None, drm_root=os.path.join(d, "drm"))
+            try:
+                s.tick()
+                self.assertEqual(s._last["gpus"][0]["name"], "X")
+            finally:
+                s.stop()

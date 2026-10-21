@@ -621,13 +621,9 @@ def load_presets():
 def local_now(prof, now):
     """(día 0-6, minuto del día) con el reloj local (o el huso de la ciudad si el usuario la cargó)."""
     from datetime import datetime
-    from zoneinfo import ZoneInfo
 
-    tz = (prof.get("geo") or {}).get("timezone")
-    try:
-        d = datetime.fromtimestamp(now, ZoneInfo(tz)) if tz else datetime.fromtimestamp(now)
-    except Exception:
-        d = datetime.fromtimestamp(now)
+    tz = osenv.tzinfo((prof.get("geo") or {}).get("timezone"))
+    d = datetime.fromtimestamp(now, tz) if tz else datetime.fromtimestamp(now)
     return d.weekday(), d.hour * 60 + d.minute
 
 

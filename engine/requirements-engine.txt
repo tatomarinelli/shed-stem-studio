@@ -1,0 +1,3 @@
+# Dependencias del motor fuera de la librería estándar (el resto del motor no necesita nada).
+# Docker las instala con pip; el runtime de Windows (windows/build/build.ps1) las incluye en site-packages.
+tidalapi==0.8.11

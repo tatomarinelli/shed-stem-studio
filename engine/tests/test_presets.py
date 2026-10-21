@@ -6,6 +6,7 @@ import unittest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 import presets as P  # noqa: E402
+from perms import assert_private  # noqa: E402
 
 LUN, MAR, VIE, SAB, DOM = 0, 1, 4, 5, 6
 
@@ -85,7 +86,7 @@ class Validate(unittest.TestCase):
             path = os.path.join(t, "presets.json")
             P.save(path, d)
             self.assertEqual(P.load(path), d)
-            self.assertEqual(oct(os.stat(path).st_mode & 0o777), "0o600")
+            assert_private(self, path)
         self.assertEqual(P.load("/nonexistent")["default"], "estudio")
 
 

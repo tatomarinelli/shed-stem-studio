@@ -51,7 +51,19 @@ el=all.find(e=>e.textContent.trim()===t)||all.find(e=>e.textContent.trim().inclu
 if(!el)return 'NO ENCONTRADO: '+t;el.click();return 'clic en: '+(el.textContent||el.tagName).trim().slice(0,60)}"""
 
 
+def browser():
+    """Chromium sin ventana: el del sistema (Linux) o, en Windows, Chrome o Edge (mismo motor, mismo protocolo)."""
+    for name in ('chromium', 'chromium-browser', 'google-chrome', 'chrome'):
+        if shutil.which(name): return shutil.which(name)
+    for base in (os.environ.get('ProgramFiles'), os.environ.get('ProgramFiles(x86)'), os.environ.get('LOCALAPPDATA')):
+        for rel in ('Google/Chrome/Application/chrome.exe', 'Microsoft/Edge/Application/msedge.exe'):
+            if base and os.path.isfile(os.path.join(base, rel)): return os.path.join(base, rel)
+    return 'chromium'
+
+
 def main():
+    for stream in (sys.stdout, sys.stderr):  # la consola de Windows usa cp1252 y no imprime '≈' ni '·'
+        if hasattr(stream, 'reconfigure'): stream.reconfigure(encoding='utf-8', errors='replace')
     ap = argparse.ArgumentParser()
     ap.add_argument('url'); ap.add_argument('--wait', type=float, default=2)
     ap.add_argument('--click', action='append', default=[]); ap.add_argument('--text', action='append', default=[])
@@ -60,7 +72,7 @@ def main():
     ap.add_argument('--steps-wait', type=float, default=1.2, help='espera tras cada clic')
     a = ap.parse_args()
     prof = tempfile.mkdtemp(prefix='uicheck-'); port = 9400 + os.getpid() % 500
-    exe = shutil.which('chromium') or 'chromium'
+    exe = browser()
     proc = subprocess.Popen([exe, '--headless=new', '--no-sandbox', f'--user-data-dir={prof}', f'--remote-debugging-port={port}',
                              '--autoplay-policy=no-user-gesture-required', '--window-size=1400,1000', 'about:blank'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     try:

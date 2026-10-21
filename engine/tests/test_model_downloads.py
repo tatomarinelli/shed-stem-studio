@@ -3,13 +3,19 @@ import unittest
 from pathlib import Path
 
 import models
+import osenv
 import stems
 
 
 class ModelDownloads(unittest.TestCase):
     def test_missing_separation_model_blocks_separation(self):
-        old = stems.MODELS_DIR
+        old, old_env = stems.MODELS_DIR, stems.ENV
         stems.MODELS_DIR = Path(tempfile.mkdtemp())
+        stems.ENV = Path(tempfile.mkdtemp())  # entorno falso: sin él la prueba dependería de que la máquina tenga uno real
+        for b in ("python", "audio-separator"):
+            exe = osenv.env_bin(stems.ENV, b)
+            exe.parent.mkdir(parents=True, exist_ok=True)
+            exe.write_bytes(b"x")
         try:
             self.assertFalse(stems.sep_model_present())
             with self.assertRaises(stems.StemsError) as cm:
@@ -19,7 +25,7 @@ class ModelDownloads(unittest.TestCase):
                 (stems.MODELS_DIR / f).write_bytes(b"x")
             self.assertTrue(stems.sep_model_present())
         finally:
-            stems.MODELS_DIR = old
+            stems.MODELS_DIR, stems.ENV = old, old_env
 
     def test_custom_ollama_names(self):
         ok = ["qwen3:8b", "mistral-nemo", "hf.co/user/model:Q4_K_M", "llama3.2:3b-instruct-q4_0"]

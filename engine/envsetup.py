@@ -12,9 +12,12 @@ import threading
 import time
 from pathlib import Path
 
+import backends
+import hardware
 import stems
 
-REQ = Path(__file__).with_name("requirements-env.txt")
+REQ = Path(__file__).with_name("requirements-env.txt")  # por defecto; start() elige el del motor (backends.py)
+MARKER = "backend.txt"  # junto al venv: qué motor se instaló
 _job = {"state": "idle", "percent": 0, "message": "", "step": "", "done": 0, "total": 0, "rate": 0}
 _lock = threading.Lock()
 PKG = re.compile(r"^(Collecting|Downloading|Installing collected packages)")
@@ -32,15 +35,30 @@ def present():
     return osenv.env_bin(stems.ENV, "audio-separator").exists() and osenv.env_bin(stems.ENV, "python").exists()
 
 
+def installed_backend():
+    try:
+        return (stems.ENV / MARKER).read_text(encoding="utf-8").strip() or None
+    except OSError:
+        return None
+
+
 def status():
-    return {**_job, "present": present(), "path": str(stems.ENV / "venv"), "approxGb": 8}
+    return {**_job, "present": present(), "path": str(stems.ENV / "venv"), "approxGb": 8, "backend": installed_backend() if present() else None}
 
 
-def _count_requirements():
-    return max(1, sum(1 for ln in REQ.read_text().splitlines() if ln.strip() and not ln.startswith(("#", "--"))))
+def _count_requirements(req=None):
+    return max(1, sum(1 for ln in (req or REQ).read_text().splitlines() if ln.strip() and not ln.startswith(("#", "--"))))
 
 
-def start():
+def start(backend=None):
+    """`backend`: id de backends.CATALOG; sin él, el recomendado para este equipo. Solo se instala lo que existe de verdad."""
+    gpus = hardware._gpus()
+    backend = backend or backends.recommended_id(gpus)
+    req = backends.requirements_for(backend)
+    if req is None or not req.is_file():
+        raise EnvError("Ese motor de separación todavía no se puede instalar.")
+    if not backends.compatible(backend, gpus):
+        raise EnvError("Tu equipo no es compatible con ese motor.")
     with _lock:
         if _job["state"] == "running":
             raise EnvError("Ya se está instalando.")
@@ -57,7 +75,7 @@ def start():
             if code.returncode != 0:
                 raise EnvError("No se pudo crear el entorno: " + (code.stderr.strip().splitlines() or ["sin salida"])[-1][:200])
             pip = str(osenv.env_bin(env, "pip"))
-            proc = subprocess.Popen([pip, "install", "--no-cache-dir", "--progress-bar", "raw", "--no-deps", "-r", str(REQ)],
+            proc = subprocess.Popen([pip, "install", "--no-cache-dir", "--progress-bar", "raw", "--no-deps", "-r", str(req)],
                                     stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
                                     env={**os.environ, "PIP_DISABLE_PIP_VERSION_CHECK": "1", **osenv.tmp_env(stems.ROOT / "tmp")},
                                     **osenv.sys_flags())
@@ -86,6 +104,7 @@ def start():
             proc.wait()
             if proc.returncode != 0 or not present():
                 raise EnvError("La instalación falló: " + " | ".join(x.strip() for x in tail[-3:] if x.strip())[:240])
+            (env / MARKER).write_text(backend, encoding="utf-8")
             _job.update(state="done", percent=100, step="Listo")
         except Exception as e:
             _job.update(state="error", message=str(e) if isinstance(e, EnvError) else f"Falló: {type(e).__name__}")

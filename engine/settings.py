@@ -51,7 +51,8 @@ def _abs_dir(value, label):
         raise SettingsError(f"{label}: falta la ruta.")
     p = Path(os.path.normpath(value.strip()))
     if not osenv.is_absolute(str(p)):
-        raise SettingsError(f"{label}: la ruta tiene que ser absoluta ({'por ejemplo D:\\Musica' if osenv.WINDOWS else 'empezar con /'}).")
+        hint = "por ejemplo D:\\Musica" if osenv.WINDOWS else "empezar con /"  # fuera del f-string: con barra invertida solo compila en Python 3.12+
+        raise SettingsError(f"{label}: la ruta tiene que ser absoluta ({hint}).")
     if osenv.is_forbidden(p, FORBIDDEN):
         raise SettingsError(f"{label}: no se pueden usar carpetas del sistema ({p}).")
     return p

@@ -61,6 +61,114 @@ def secure(path, mode):
     os.chmod(path, mode)
 
 
+def tzinfo(name):
+    """Huso IANA por nombre, o None si no se puede cargar (Windows no trae la base de husos: hace falta el paquete tzdata). Quien llama cae a la hora local."""
+    if not name:
+        return None
+    try:
+        from zoneinfo import ZoneInfo
+        return ZoneInfo(name)
+    except Exception:
+        return None
+
+
+def find_ollama():
+    """Ejecutable de Ollama: el del PATH o, en Windows, el del instalador oficial (un proceso que ya estaba abierto no ve el PATH nuevo)."""
+    import shutil
+    found = shutil.which("ollama")
+    if found or not WINDOWS:
+        return found
+    for base in (os.environ.get("LOCALAPPDATA"), os.environ.get("ProgramFiles")):
+        if base:
+            cand = Path(base) / ("Programs" if base == os.environ.get("LOCALAPPDATA") else "") / "Ollama" / "ollama.exe"
+            if cand.is_file():
+                return str(cand)
+    return None
+
+
+def find_ffmpeg():
+    """Carpeta de ffmpeg: la del PATH o, en Windows, donde lo deja winget (un proceso ya abierto no ve el PATH nuevo)."""
+    import glob
+    import shutil
+    found = shutil.which("ffmpeg")
+    if found or not WINDOWS:
+        return str(Path(found).parent) if found else None
+    local = os.environ.get("LOCALAPPDATA")
+    if local:
+        for pattern in (os.path.join(local, "Microsoft", "WinGet", "Links", "ffmpeg.exe"),
+                        os.path.join(local, "Microsoft", "WinGet", "Packages", "*FFmpeg*", "**", "bin", "ffmpeg.exe")):
+            for hit in sorted(glob.glob(pattern, recursive=True)):
+                return str(Path(hit).parent)
+    return None
+
+
+def ensure_ffmpeg_on_path():
+    """audio-separator lo necesita (incluso para bajar el modelo). Lo agrega al PATH de este proceso y de sus hijos. True si lo encontró."""
+    folder = find_ffmpeg()
+    if folder and folder.lower() not in os.environ.get("PATH", "").lower():
+        os.environ["PATH"] = folder + os.pathsep + os.environ.get("PATH", "")
+    return bool(folder)
+
+
+VENDORS = {0x10DE: "nvidia", 0x1002: "amd", 0x1022: "amd", 0x8086: "intel"}
+
+
+def _dxgi_adapters():
+    """Lista las placas con DXGI (ctypes, sin dependencias). Da la VRAM real de 64 bits, que WMI trunca a 4 GB."""
+    import ctypes
+    from ctypes import c_int32, c_size_t, c_uint, c_uint16, c_uint32, c_ubyte, c_void_p, c_wchar
+
+    class GUID(ctypes.Structure):
+        _fields_ = [("a", c_uint32), ("b", c_uint16), ("c", c_uint16), ("d", c_ubyte * 8)]
+
+    class Desc(ctypes.Structure):
+        _fields_ = [("Description", c_wchar * 128), ("VendorId", c_uint), ("DeviceId", c_uint), ("SubSysId", c_uint),
+                    ("Revision", c_uint), ("Dedicated", c_size_t), ("DedicatedSys", c_size_t), ("Shared", c_size_t),
+                    ("LuidLow", c_uint32), ("LuidHigh", c_int32), ("Flags", c_uint)]
+
+    def method(obj, index, *argtypes):  # llamada a un método COM por su posición en la tabla virtual
+        vtbl = ctypes.cast(c_void_p(obj), ctypes.POINTER(c_void_p))[0]
+        return ctypes.WINFUNCTYPE(ctypes.c_long, c_void_p, *argtypes)(ctypes.cast(vtbl, ctypes.POINTER(c_void_p))[index])
+
+    iid = GUID(0x770AAE78, 0xF26F, 0x4DBA, (c_ubyte * 8)(0xA8, 0x29, 0x25, 0x3C, 0x83, 0xD1, 0xB3, 0x87))  # IDXGIFactory1
+    dxgi = ctypes.WinDLL("dxgi")
+    dxgi.CreateDXGIFactory1.argtypes = [ctypes.POINTER(GUID), ctypes.POINTER(c_void_p)]
+    dxgi.CreateDXGIFactory1.restype = ctypes.c_long
+    factory = c_void_p()
+    if dxgi.CreateDXGIFactory1(ctypes.byref(iid), ctypes.byref(factory)) != 0:
+        return []
+    out = []
+    try:
+        for i in range(16):
+            adapter = c_void_p()
+            if method(factory.value, 12, c_uint, ctypes.POINTER(c_void_p))(factory.value, i, ctypes.byref(adapter)) != 0:  # EnumAdapters1; error al llegar al final
+                break
+            try:
+                d = Desc()
+                if method(adapter.value, 10, ctypes.POINTER(Desc))(adapter.value, ctypes.byref(d)) != 0:  # GetDesc1
+                    continue
+                if d.Flags & 2:  # DXGI_ADAPTER_FLAG_SOFTWARE (Microsoft Basic Render Driver)
+                    continue
+                out.append({"name": d.Description.strip(), "vendor": VENDORS.get(d.VendorId, "other"), "vramBytes": int(d.Dedicated),
+                            "integrated": d.Dedicated < 1024**3,  # una integrada reserva a lo sumo unos cientos de MB propios
+                            "luid": f"0x{d.LuidHigh & 0xFFFFFFFF:08X}_0x{d.LuidLow:08X}"})
+            finally:
+                method(adapter.value, 2)(adapter.value)  # Release
+    finally:
+        method(factory.value, 2)(factory.value)
+    return out
+
+
+def gpu_adapters():
+    """Placas de video del equipo (NVIDIA, AMD, Intel) en Windows: [{name, vendor, vramBytes, integrated, luid}]. [] en otros sistemas o si falla."""
+    if not WINDOWS:
+        return []
+    try:
+        return _dxgi_adapters()
+    except Exception:
+        return []
+
+
 def sys_flags(low_priority=False):
     """Argumentos de Popen: sin consola en Windows y, si se pide, prioridad baja."""
     if not WINDOWS:
@@ -186,7 +294,12 @@ def kill_children_on_exit():
         _fields_ = [("BasicLimitInformation", Basic), ("IoInfo", IoCounters), ("ProcessMemoryLimit", ctypes.c_size_t),
                     ("JobMemoryLimit", ctypes.c_size_t), ("PeakProcessMemoryUsed", ctypes.c_size_t),
                     ("PeakJobMemoryUsed", ctypes.c_size_t)]
+    # Sin argtypes ctypes pasa los HANDLE como int de 32 bits y se desborda (GetCurrentProcess devuelve el pseudo-handle -1).
     k32.CreateJobObjectW.restype = wintypes.HANDLE
+    k32.CreateJobObjectW.argtypes = [ctypes.c_void_p, wintypes.LPCWSTR]
+    k32.SetInformationJobObject.argtypes = [wintypes.HANDLE, ctypes.c_int, ctypes.c_void_p, wintypes.DWORD]
+    k32.GetCurrentProcess.restype = wintypes.HANDLE
+    k32.AssignProcessToJobObject.argtypes = [wintypes.HANDLE, wintypes.HANDLE]
     job = k32.CreateJobObjectW(None, None)
     if not job:
         return False
@@ -194,7 +307,6 @@ def kill_children_on_exit():
     info.BasicLimitInformation.LimitFlags = 0x2000  # JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
     if not k32.SetInformationJobObject(job, 9, ctypes.byref(info), ctypes.sizeof(info)):  # 9 = ExtendedLimitInformation
         return False
-    k32.GetCurrentProcess.restype = wintypes.HANDLE
     if not k32.AssignProcessToJobObject(job, k32.GetCurrentProcess()):
         return False
     _job = job  # el handle vive mientras viva el proceso

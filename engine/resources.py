@@ -15,6 +15,8 @@ import ctypes
 import glob
 import io
 import os
+import osenv
+import re
 import shutil
 import subprocess
 import sys
@@ -193,6 +195,99 @@ def amd_gpus(drm_root="/sys/class/drm"):
     return out
 
 
+# ------------------------------------------------------------------------- placas en Windows (DXGI + contadores de rendimiento)
+
+_LUID_RE = r"luid_0x([0-9A-Fa-f]+)_0x([0-9A-Fa-f]+)"
+
+
+def _luid(high, low):
+    return f"0x{int(high, 16):08X}_0x{int(low, 16):08X}"
+
+
+def aggregate_gpu_counters(engine_items, mem_items):
+    """Contadores de Windows -> {luid: (uso %, VRAM usada en bytes)}. Sirven igual para NVIDIA, AMD e Intel.
+    engine_items: [(instancia, %)] de 'GPU Engine' (una por proceso y motor: pid_N_luid_..._phys_0_eng_0_engtype_3D);
+    se suma por tipo de motor y se toma el más cargado, como el Administrador de tareas.
+    mem_items: [(instancia, bytes)] de 'GPU Adapter Memory / Dedicated Usage' (luid_..._phys_0)."""
+    by_type = {}
+    for name, v in engine_items:
+        m = re.search(_LUID_RE + r"_phys_\d+_eng_\d+_engtype_(\w+)", name)
+        if m and v is not None:
+            d = by_type.setdefault(_luid(m.group(1), m.group(2)), {})
+            d[m.group(3)] = d.get(m.group(3), 0.0) + v
+    used = {}
+    for name, v in mem_items:
+        m = re.search(_LUID_RE, name)
+        if m and v is not None:
+            used[_luid(m.group(1), m.group(2))] = used.get(_luid(m.group(1), m.group(2)), 0) + int(v)
+    out = {}
+    for luid in set(by_type) | set(used):
+        t = by_type.get(luid)
+        out[luid] = (round(min(100.0, max(t.values())), 1) if t else None, used.get(luid))
+    return out
+
+
+class _PdhItem(ctypes.Structure):
+    _fields_ = [("name", ctypes.c_wchar_p), ("status", ctypes.c_uint32), ("value", ctypes.c_double)]
+
+
+class WindowsGpuCounters:
+    """PDH por ctypes con nombres en inglés (los contadores localizados cambian de nombre según el idioma de Windows).
+    La primera lectura no trae datos de uso (los contadores son tasas): hace falta una segunda muestra."""
+    PDH_MORE_DATA = 0x800007D2
+    FMT = 0x200 | 0x8000  # PDH_FMT_DOUBLE | PDH_FMT_NOCAP100
+
+    def __init__(self, pdh=None):
+        self.pdh = pdh or ctypes.WinDLL("pdh")
+        self.pdh.PdhOpenQueryW.argtypes = [ctypes.c_wchar_p, ctypes.c_size_t, ctypes.POINTER(ctypes.c_void_p)]
+        self.pdh.PdhAddEnglishCounterW.argtypes = [ctypes.c_void_p, ctypes.c_wchar_p, ctypes.c_size_t, ctypes.POINTER(ctypes.c_void_p)]
+        self.pdh.PdhCollectQueryData.argtypes = [ctypes.c_void_p]
+        self.pdh.PdhGetFormattedCounterArrayW.argtypes = [ctypes.c_void_p, ctypes.c_uint32, ctypes.POINTER(ctypes.c_uint32),
+                                                          ctypes.POINTER(ctypes.c_uint32), ctypes.c_void_p]
+        self.pdh.PdhCloseQuery.argtypes = [ctypes.c_void_p]
+        self.query = ctypes.c_void_p()
+        if self.pdh.PdhOpenQueryW(None, 0, ctypes.byref(self.query)) != 0:
+            raise OSError("PdhOpenQuery falló")
+        self.engine, self.mem = ctypes.c_void_p(), ctypes.c_void_p()
+        if (self.pdh.PdhAddEnglishCounterW(self.query, r"\GPU Engine(*)\Utilization Percentage", 0, ctypes.byref(self.engine)) != 0
+                or self.pdh.PdhAddEnglishCounterW(self.query, r"\GPU Adapter Memory(*)\Dedicated Usage", 0, ctypes.byref(self.mem)) != 0):
+            self.close()
+            raise OSError("Este Windows no tiene contadores de GPU")
+        self.pdh.PdhCollectQueryData(self.query)
+
+    def _array(self, counter):
+        size, count = ctypes.c_uint32(0), ctypes.c_uint32(0)
+        if self.pdh.PdhGetFormattedCounterArrayW(counter, self.FMT, ctypes.byref(size), ctypes.byref(count), None) & 0xFFFFFFFF != self.PDH_MORE_DATA:  # devuelve int con signo
+            return []
+        buf = ctypes.create_string_buffer(size.value)
+        if self.pdh.PdhGetFormattedCounterArrayW(counter, self.FMT, ctypes.byref(size), ctypes.byref(count), buf) != 0:
+            return []
+        items = ctypes.cast(buf, ctypes.POINTER(_PdhItem))
+        return [(items[i].name, items[i].value) for i in range(count.value) if items[i].status in (0, 1) and items[i].name]
+
+    def read(self):
+        if self.pdh.PdhCollectQueryData(self.query) != 0:
+            return {}
+        return aggregate_gpu_counters(self._array(self.engine), self._array(self.mem))
+
+    def close(self):
+        if self.query:
+            self.pdh.PdhCloseQuery(self.query)
+            self.query = ctypes.c_void_p()
+
+
+def windows_gpus(adapters, counters):
+    """Placas del monitor (mismo formato que nvidia-smi y sysfs). `counters`: {luid: (uso %, VRAM usada)} o {}.
+    Temperatura y potencia no las da Windows sin las bibliotecas de cada fabricante: quedan en null."""
+    out = []
+    for a in adapters:
+        util, used = counters.get(a["luid"], (None, None))
+        out.append({"index": len(out), "name": a["name"], "vendor": a["vendor"], "utilPercent": util, "memUsedBytes": used,
+                    "memTotalBytes": a["vramBytes"], "tempC": None, "powerW": None, "integrated": a["integrated"],
+                    "unverified": a["vendor"] != "amd"})  # solo se probó con AMD real (Radeon RX 6700S)
+    return out
+
+
 # ------------------------------------------------------------------------------------------------------ plataformas
 
 class LinuxPlatform:
@@ -331,6 +426,20 @@ class WindowsPlatform:
 
     def processes(self):
         return {}
+
+    def gpus(self):
+        """Todas las placas (NVIDIA, AMD, Intel) por DXGI, con uso y VRAM de los contadores de Windows."""
+        if not hasattr(self, "_adapters"):
+            self._adapters, self._counters = osenv.gpu_adapters(), None
+            try:
+                self._counters = WindowsGpuCounters()
+            except (OSError, AttributeError):
+                pass
+        try:
+            stats = self._counters.read() if self._counters else {}
+        except (OSError, ValueError):
+            stats = {}
+        return windows_gpus(self._adapters, stats)
 
     def describe(self, pid):
         return {"name": "", "rss": None, "cmd": ""}
@@ -501,9 +610,10 @@ class Sampler:
                 return gpus
             if self.stream.alive():
                 return []  # nvidia-smi está corriendo pero todavía no dio su primera línea: no se cae a AMD
-        if sys.platform.startswith("linux"):
-            return amd_gpus(self.drm_root)
-        return []
+        gpus = amd_gpus(self.drm_root)  # sin /sys/class/drm (Windows, macOS) el glob no encuentra nada
+        if not gpus and hasattr(self.platform, "gpus"):
+            gpus = self.platform.gpus()
+        return gpus
 
     def _procs(self, now, gpus):
         if gpus and any(g["vendor"] == "nvidia" for g in gpus):

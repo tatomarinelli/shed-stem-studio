@@ -4,8 +4,7 @@ import sys
 import tempfile
 import unittest
 from unittest import mock
-from datetime import datetime
-from zoneinfo import ZoneInfo
+from datetime import datetime, timedelta, timezone
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 os.environ.setdefault("STEMSHED_MEMORY_DIR", tempfile.mkdtemp(prefix="stemshed-test-"))
@@ -13,6 +12,7 @@ os.environ["STEMSHED_NO_SCHEDULER"] = "1"
 import context as C  # noqa: E402
 import profile as P  # noqa: E402
 import recs as R  # noqa: E402
+from perms import assert_private  # noqa: E402
 
 
 class Profile(unittest.TestCase):
@@ -44,7 +44,7 @@ class Profile(unittest.TestCase):
             self.assertEqual(data["geo"]["query"], "Rosario")
             P.save(path, {"instrument": "guitarra"}, geocode=geo)
             self.assertEqual(calls, ["Rosario"])  # misma ciudad: no se vuelve a buscar
-            self.assertEqual(oct(os.stat(path).st_mode & 0o777), "0o600")
+            assert_private(self, path)
 
     def test_empty_profile_falls_back(self):
         self.assertEqual(P.describe(P.load("/nonexistent/profile.json")), P.LEGACY)
@@ -56,11 +56,17 @@ class Context(unittest.TestCase):
 
     def test_time_and_weather(self):
         tz = "America/Argentina/Buenos_Aires"
-        ts = datetime(2026, 10, 20, 22, 30, tzinfo=ZoneInfo(tz)).timestamp()  # martes a la noche
+        ts = datetime(2026, 10, 20, 22, 30, tzinfo=timezone(timedelta(hours=-3))).timestamp()  # martes a la noche
         prof = {"useTime": True, "useWeather": True, "geo": {"name": "Rosario", "latitude": -34.6, "timezone": tz}}
-        ctx = C.build(prof, ts, {"temp": 15.6, "code": 1})
+        with mock.patch.object(C.osenv, "tzinfo", return_value=timezone(timedelta(hours=-3))):  # no depende de la base de husos del sistema
+            ctx = C.build(prof, ts, {"temp": 15.6, "code": 1})
         self.assertEqual(C.describe(ctx), "martes a la noche · Rosario, primavera · 16 °C, mayormente despejado")
         self.assertEqual(C.season(datetime(2026, 1, 10).date(), south=False), "invierno")
+
+    def test_missing_timezone_database_falls_back_to_local_time(self):
+        prof = {"useTime": True, "geo": {"timezone": "Nada/Inexistente"}}
+        ctx = C.build(prof, datetime(2026, 10, 20, 22, 30).timestamp())
+        self.assertEqual(ctx["daypart"], "noche")
 
 
 class Reason(unittest.TestCase):

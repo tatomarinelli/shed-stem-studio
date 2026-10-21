@@ -47,6 +47,41 @@ class OsenvTest(unittest.TestCase):
             osenv.secure("/x", 0o600)
             chmod.assert_called_once_with("/x", 0o600)
 
+    def test_tzinfo_sin_base_de_husos_devuelve_none(self):
+        self.assertIsNone(osenv.tzinfo(None))
+        self.assertIsNone(osenv.tzinfo(""))
+        self.assertIsNone(osenv.tzinfo("Nada/Inexistente"))
+        with mock.patch("zoneinfo.ZoneInfo", side_effect=KeyError("sin tzdata")):
+            self.assertIsNone(osenv.tzinfo("America/Argentina/Buenos_Aires"))
+
+    def test_find_ollama_en_windows_busca_donde_instala_el_instalador(self):
+        with tempfile.TemporaryDirectory() as d:
+            exe = Path(d, "Programs", "Ollama", "ollama.exe")
+            exe.parent.mkdir(parents=True)
+            exe.write_bytes(b"x")
+            with mock.patch.object(osenv, "WINDOWS", True), mock.patch("shutil.which", return_value=None),                     mock.patch.dict(os.environ, {"LOCALAPPDATA": d, "ProgramFiles": os.path.join(d, "nada")}):
+                self.assertEqual(osenv.find_ollama(), str(exe))
+            with mock.patch.object(osenv, "WINDOWS", False), mock.patch("shutil.which", return_value=None):
+                self.assertIsNone(osenv.find_ollama())
+
+    def test_find_ffmpeg_en_windows_busca_donde_lo_deja_winget(self):
+        with tempfile.TemporaryDirectory() as d:
+            exe = Path(d, "Microsoft", "WinGet", "Packages", "Gyan.FFmpeg_x", "ffmpeg-9-full_build", "bin", "ffmpeg.exe")
+            exe.parent.mkdir(parents=True)
+            exe.write_bytes(b"x")
+            with mock.patch.object(osenv, "WINDOWS", True), mock.patch("shutil.which", return_value=None), mock.patch.dict(os.environ, {"LOCALAPPDATA": d}):
+                self.assertEqual(osenv.find_ffmpeg(), str(exe.parent))
+            with mock.patch.object(osenv, "WINDOWS", False), mock.patch("shutil.which", return_value=None):
+                self.assertIsNone(osenv.find_ffmpeg())
+
+    def test_ensure_ffmpeg_agrega_al_path_una_sola_vez(self):
+        with mock.patch.object(osenv, "find_ffmpeg", return_value="/ff/bin"), mock.patch.dict(os.environ, {"PATH": "/x"}):
+            self.assertTrue(osenv.ensure_ffmpeg_on_path())
+            self.assertTrue(osenv.ensure_ffmpeg_on_path())
+            self.assertEqual(os.environ["PATH"].count("/ff/bin"), 1)
+        with mock.patch.object(osenv, "find_ffmpeg", return_value=None):
+            self.assertFalse(osenv.ensure_ffmpeg_on_path())
+
     def test_flags_de_subproceso(self):
         with mock.patch.object(osenv, "WINDOWS", False):
             self.assertEqual(osenv.sys_flags(True), {})
