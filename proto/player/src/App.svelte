@@ -14,12 +14,14 @@
   import Inicio from './screens/Inicio.svelte';
   import { setup } from './lib/setup.svelte';
   import { settings } from './lib/settings.svelte';
+  import { separation } from './lib/separation.svelte';
 
   onMount(() => {
     void player.init();
     void setup.init();
     settings.watchServices(true);
-    return () => settings.watchServices(false);
+    separation.watch(true);
+    return () => { settings.watchServices(false); separation.watch(false); };
   });
 
   function onKey(e: KeyboardEvent) {

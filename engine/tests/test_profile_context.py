@@ -130,6 +130,24 @@ class NoTidal(unittest.TestCase):
         with mock.patch.object(recs, "read_sources", side_effect=err), mock.patch.object(recs, "cached_sources", return_value=[{"kind": "artist", "artist": "X"}]):
             self.assertEqual(len(recs.load_sources()), 1)
 
+class WaitCatalog(unittest.TestCase):
+    def test_wait_is_capped_and_pauses_enrichment(self):
+        import time
+
+        import catalog
+        import recs
+
+        catalog._genre_job["running"] = True
+        try:
+            t0 = time.time()
+            recs._wait_catalog(limit=0.3)
+            self.assertLess(time.time() - t0, 4)
+            self.assertTrue(catalog._pause.is_set())
+        finally:
+            catalog._genre_job["running"] = False
+            catalog.resume_enrichment()
+        self.assertFalse(catalog._pause.is_set())
+
 
 if __name__ == "__main__":
     unittest.main()

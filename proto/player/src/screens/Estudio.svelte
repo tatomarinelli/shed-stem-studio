@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { player } from '../lib/player.svelte';
   import { stemlist } from '../lib/stemlist.svelte';
+  import { separation } from '../lib/separation.svelte';
   import { nav } from '../lib/nav.svelte';
   import Stack from '../components/Stack.svelte';
   import Metrics from '../components/Metrics.svelte';
@@ -11,7 +12,7 @@
   import { analysis } from '../lib/analysis.svelte';
   import { untrack } from 'svelte';
 
-  onMount(() => stemlist.load());
+  onMount(() => { void stemlist.load(); separation.watch(true); return () => separation.watch(false); });
 
   let query = $state('');
   let confirming = $state('');
@@ -46,6 +47,20 @@
         <span class="muted num">{totals.count}</span>
         {#if ready}<button class="ghost" onclick={() => (listOpen = false)} aria-label="Ocultar la lista">Ocultar</button>{/if}
       </div>
+      {#if separation.active.length}
+        <ul class="proc" aria-label="En proceso" aria-live="polite">
+          {#each separation.active as j (j.id)}
+            <li class:err={j.state === 'error'}>
+              <div class="pm"><b>{j.title || 'Tema ' + j.id}</b>{#if j.artist}<span class="muted">{j.artist}</span>{/if}</div>
+              {#if j.state === 'running'}
+                <div class="pbar" role="progressbar" aria-valuenow={j.percent} aria-valuemin="0" aria-valuemax="100"><i style="width:{Math.max(4, j.percent)}%"></i></div>
+                <span class="muted num">{separation.stageLabel(j.stage)} {j.percent ? `${j.percent} %` : '…'}</span>
+              {:else if j.state === 'error'}<span class="warn" role="alert">{j.message || 'No se pudo separar.'}</span>
+              {:else}<span class="ok">Listo</span>{/if}
+            </li>
+          {/each}
+        </ul>
+      {/if}
       <input type="search" placeholder="Buscar" bind:value={query} aria-label="Buscar entre los descargados" />
       {#if stemlist.error}<p class="warn" role="alert">{stemlist.error}</p>{/if}
       <ul>
@@ -110,6 +125,15 @@
         <p class="big err">No se pudo cargar el tema.</p>
         <p class="muted">{player.error}</p>
       </div>
+    {:else if separation.processing.length}
+      <div class="empty working" role="status" aria-live="polite">
+        {#each separation.processing as j (j.id)}
+          <p class="big">Separando «{j.title || 'el tema'}»</p>
+          {#if j.artist}<p class="muted">{j.artist}</p>{/if}
+          <div class="pbar big" role="progressbar" aria-valuenow={j.percent} aria-valuemin="0" aria-valuemax="100"><i style="width:{Math.max(4, j.percent)}%"></i></div>
+          <p class="muted num">{separation.stageLabel(j.stage)} {j.percent ? `${j.percent} %` : '…'} · cuando termine aparece en la lista</p>
+        {/each}
+      </div>
     {:else}
       <div class="empty">
         <p class="big">Elegí un tema de la lista para estudiarlo.</p>
@@ -155,4 +179,14 @@
   progress::-webkit-progress-bar { background: var(--line); }
   progress::-webkit-progress-value { background: linear-gradient(90deg, #f0a43c, #ff4d8d, #4fa3d9, #f0a43c); background-size: 200% 100%; animation: shimmer 2.4s linear infinite; transition: width 0.3s var(--ease); }
   @media (max-width: 1000px) { .studio { grid-template-columns: 1fr; } .lib { position: static; max-height: 40vh; } }
+  .proc { list-style: none; margin: 0 0 4px; padding: 0; display: grid; gap: 8px; }
+  .proc li { display: grid; gap: 5px; padding: 10px 12px; border-radius: 12px; background: rgba(79, 163, 217, 0.1); border: 1px solid rgba(79, 163, 217, 0.35); }
+  .proc li.err { background: rgba(240, 164, 60, 0.08); border-color: rgba(240, 164, 60, 0.4); }
+  .pm { display: grid; gap: 1px; min-width: 0; }
+  .pm b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pbar { height: 6px; border-radius: 3px; background: rgba(255,255,255,0.1); overflow: hidden; }
+  .pbar i { display: block; height: 100%; border-radius: 3px; background: linear-gradient(90deg, #4fa3d9, #7cc7a3); transition: width 0.6s var(--ease); }
+  .pbar.big { height: 10px; width: min(420px, 80%); }
+  .working { display: grid; gap: 6px; justify-items: center; }
+  .ok { color: #7cc7a3; } .warn { color: #f0a43c; }
 </style>

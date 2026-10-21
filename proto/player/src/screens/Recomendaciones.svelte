@@ -1,14 +1,14 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, tick } from 'svelte';
   import { recs, type Item, type Mode, type Reaction, type RecsResult } from '../lib/recs.svelte';
   import { seed } from '../lib/seed.svelte';
   import AlbumCard from '../components/recs/AlbumCard.svelte';
+  import Cover from '../components/Cover.svelte';
   import ProfileForm from '../components/recs/ProfileForm.svelte';
   import PresetsEditor from '../components/recs/PresetsEditor.svelte';
   import PresetWizard from '../components/recs/PresetWizard.svelte';
   import { schedule as scheduleText } from '../lib/presetText';
 
-  onMount(() => { recs.load(); });
 
   const steps: Record<string, string> = {
     profile: 'Leyendo tus gustos…',
@@ -39,6 +39,36 @@
   const welcome = $derived(!!recs.profile && !recs.profileFilled && !recs.profile.dismissed && !showProfile);
   const seedLabel = $derived(seed.value ? [seed.value.artist, seed.value.album ?? seed.value.title].filter(Boolean).join(' · ') : '');
 
+  let askSection = $state<HTMLElement>();
+  /** El disco desde el que se pidió "parecidos": se conserva mientras corre la búsqueda, aunque la semilla ya se haya consumido. */
+  let runningSeed = $state<{ artist: string; album?: string; title?: string } | null>(null);
+
+  onMount(async () => {
+    await recs.load();
+    // Llegó desde Música con "Recomendar parecidos": se muestra el pedido y arranca solo.
+    if (seed.value) {
+      await tick();
+      askSection?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      await startSeed();
+    }
+  });
+
+  async function startSeed() {
+    const s = seed.value;
+    if (!s || recs.state === 'running' || recs.state === 'no_engine') return;
+    runningSeed = s;
+    if (!(await recs.generate('request', { prompt: ask.trim(), mode, seed: s }))) runningSeed = null;
+  }
+  // La semilla se consume recién cuando la búsqueda termina bien; si falla, queda para reintentar.
+  let seenRunning = false;
+  $effect(() => {
+    const st = recs.state;
+    if (!runningSeed) { seenRunning = false; return; }
+    if (st === 'running') seenRunning = true;
+    else if (seenRunning && st === 'done') { seed.clear(); runningSeed = null; seenRunning = false; }
+    else if (seenRunning && st === 'error') { runningSeed = null; seenRunning = false; }
+  });
+
   async function react(item: Item, r: Reaction) {
     if (await recs.react(item.mbid, r)) {
       undo = { item, label: labels[r] };
@@ -52,8 +82,8 @@
   }
   async function request(e: SubmitEvent) {
     e.preventDefault();
-    const ok = await recs.generate('request', { prompt: ask.trim(), mode, seed: seed.value });
-    if (ok) seed.clear();
+    runningSeed = seed.value;
+    if (!(await recs.generate('request', { prompt: ask.trim(), mode, seed: seed.value })) ) runningSeed = null;
   }
   const when = (t: number) => new Date(t * 1000).toLocaleString('es-AR', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
   const day = (iso: string) => new Date(iso).toLocaleDateString('es-AR', { day: 'numeric', month: 'short' });
@@ -161,7 +191,7 @@
 {/if}
 
 <!-- Pedido a demanda -->
-<section class="sec">
+<section class="sec" class:live={running('request')} bind:this={askSection}>
   <div class="sec-head"><h4>Pedí algo</h4></div>
   <form class="ask" onsubmit={request}>
     <input bind:value={ask} placeholder="algo para tocar arriba, un disco de bossa…" maxlength="200" aria-label="Qué buscás" />
@@ -170,14 +200,25 @@
         <button type="button" class:on={mode === m.id} aria-pressed={mode === m.id} onclick={() => (mode = mode === m.id ? null : m.id)}>{m.label}</button>
       {/each}
     </div>
-    <button class="primary" type="submit" disabled={recs.state === 'running' || recs.state === 'no_engine' || (!ask.trim() && !mode && !seed.value)}>Buscar</button>
+    <button class="primary" type="submit" disabled={recs.state === 'running' || recs.state === 'no_engine' || (!ask.trim() && !mode && !seed.value)}>{running('request') ? 'Buscando…' : 'Buscar'}</button>
   </form>
-  {#if seed.value}
-    <p class="seed"><span class="chip">Parecido a {seedLabel} <button class="x" aria-label="Quitar semilla" onclick={() => seed.clear()}>×</button></span></p>
+  {#if seed.value && !running('request')}
+    <div class="seedcard">
+      <Cover title={seed.value.album ?? seed.value.title ?? seed.value.artist} artist={seed.value.artist} size={56} radius={10} />
+      <div class="st"><b>Parecido a {seedLabel}</b><span class="muted">Se usa como punto de partida. Tocá Buscar para pedirlo.</span></div>
+      <button class="ghost" onclick={() => seed.clear()} aria-label="Quitar este disco del pedido">Quitar</button>
+    </div>
   {/if}
 
   {#if running('request')}
-    <div class="working" role="status"><p>{steps[recs.step] ?? 'Trabajando…'}</p><div class="bar"><i></i></div></div>
+    <div class="seedcard run" role="status" aria-live="polite">
+      {#if runningSeed}<Cover title={runningSeed.album ?? runningSeed.title ?? runningSeed.artist} artist={runningSeed.artist} size={56} radius={10} />{/if}
+      <div class="st">
+        <b>{runningSeed ? `Buscando discos parecidos a ${[runningSeed.artist, runningSeed.album ?? runningSeed.title].filter(Boolean).join(' · ')}` : 'Buscando lo que pediste'}</b>
+        <span class="muted">{steps[recs.step] ?? 'Trabajando…'}</span>
+        <div class="bar"><i></i></div>
+      </div>
+    </div>
   {:else if recs.state === 'error' && recs.kind === 'request'}
     <p class="warn" role="alert">{recs.message}</p>
   {/if}
@@ -279,4 +320,11 @@
   .tag.no { color: var(--muted); }
   .disc { list-style: none; padding: 0; margin: 8px 0; display: grid; gap: 4px; font-size: 14px; }
   pre { white-space: pre-wrap; background: rgba(0, 0, 0, 0.25); border-radius: 10px; padding: 10px 12px; font-size: 12.5px; line-height: 1.5; max-height: 260px; overflow: auto; }
+  .sec.live { box-shadow: 0 0 0 1px rgba(124, 199, 163, 0.55), 0 0 28px -6px rgba(124, 199, 163, 0.45); animation: glow 2.2s ease-in-out infinite; }
+  @keyframes glow { 50% { box-shadow: 0 0 0 1px rgba(124, 199, 163, 0.25), 0 0 14px -6px rgba(124, 199, 163, 0.2); } }
+  .seedcard { display: flex; align-items: center; gap: 14px; padding: 12px 14px; border-radius: 14px; background: rgba(255, 255, 255, 0.06); border: 1px solid var(--glass-line); }
+  .seedcard.run { border-color: rgba(124, 199, 163, 0.55); }
+  .seedcard .st { display: grid; gap: 4px; flex: 1; min-width: 0; }
+  .seedcard .st b { overflow-wrap: anywhere; }
+  @media (prefers-reduced-motion: reduce) { .sec.live { animation: none; } }
 </style>

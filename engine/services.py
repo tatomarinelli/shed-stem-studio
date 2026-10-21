@@ -45,7 +45,8 @@ def active_jobs():
     jobs = []
     for tid, j in list(stems._jobs.items()):
         if j.get("state") == "running":
-            jobs.append({"kind": "separación", "label": f"Tema {tid}", "percent": j.get("percent"), "step": j.get("stage")})
+            jobs.append({"kind": "separación", "label": (f"{j['title']} · {j['artist']}" if j.get("title") else f"Tema {tid}"),
+                         "percent": j.get("percent"), "step": j.get("stage")})
     for tid, j in list(analysis._jobs.items()):
         if j.get("state") == "running":
             jobs.append({"kind": "análisis", "label": f"Tema {tid}", "percent": j.get("percent")})

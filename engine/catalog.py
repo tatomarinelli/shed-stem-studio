@@ -25,6 +25,15 @@ _cache = {"v": -1, "data": None}
 _tidal = {"fetchedAt": None, "refreshing": False, "error": "", "albums": [], "tracks": []}
 _genres = {}  # clave de disco -> {"genres": [...], "at": ts}
 _genre_job = {"running": False, "done": 0, "total": 0}
+_pause = threading.Event()   # mientras está activo, el enriquecimiento de géneros cede MusicBrainz a una recomendación
+
+
+def pause_enrichment():
+    _pause.set()
+
+
+def resume_enrichment():
+    _pause.clear()
 
 
 def norm(text):
@@ -120,6 +129,8 @@ def enrich_genres():
                     todo.append((k, a["artist"], a["title"]))
             _genre_job["total"] = len(todo)
             for k, artist, title in todo:
+                while _pause.is_set():  # una recomendación en curso usa MusicBrainz primero
+                    time.sleep(0.5)
                 _genres[k] = {"genres": _mb_genres(artist, title), "at": time.time()}
                 _genre_job["done"] += 1
                 if _genre_job["done"] % 10 == 0:

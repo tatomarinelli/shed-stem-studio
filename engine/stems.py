@@ -193,6 +193,23 @@ def fetch_local(path, out_wav):
         raise StemsError("No pude leer el archivo: " + (run.stderr.strip().splitlines() or ["ffmpeg falló"])[-1])
 
 
+def _job_meta(track_id, meta):
+    """Título y artista en el trabajo, para que la interfaz muestre qué se está procesando."""
+    if track_id in _jobs:
+        _jobs[track_id].update(title=meta.get("title") or "", artist=meta.get("artist") or "")
+
+
+def jobs_report():
+    """Separaciones en curso y las que terminaron hace poco (un minuto), para mostrar el progreso en el Estudio."""
+    now = time.time()
+    out = []
+    for tid, j in list(_jobs.items()):
+        if j.get("state") == "running" or now - j.get("finishedAt", now) < 60:
+            out.append({"id": tid, "title": j.get("title", ""), "artist": j.get("artist", ""), "state": j["state"],
+                        "stage": j.get("stage"), "percent": j.get("percent", 0), "message": j.get("message", "")})
+    return out
+
+
 def separate(session, track_id, progress):
     py, sep = ENV / "venv" / "bin" / "python", ENV / "venv" / "bin" / "audio-separator"
     if not py.exists() or not sep.exists():
@@ -210,10 +227,12 @@ def separate(session, track_id, progress):
                 raise StemsError("Ese archivo ya no está en la biblioteca. Volvé a escanear la carpeta.")
             progress("download", 0)
             meta = library.meta_for(track_id)
+            _job_meta(track_id, meta)
             fetch_local(path, source)
         else:
             progress("download", 0)
             meta = track_meta(session, track_id)
+            _job_meta(track_id, meta)
             fetch_source(session, track_id, source, tmp)
         out = Path(tmp) / "out"
         out.mkdir()
@@ -269,9 +288,9 @@ def start(session, track_id):
     def work():
         try:
             separate(session, track_id, progress)
-            _jobs[track_id].update(state="done", stage="done", percent=100)
+            _jobs[track_id].update(state="done", stage="done", percent=100, finishedAt=time.time())
         except Exception as e:
-            _jobs[track_id].update(state="error", message=str(e) if isinstance(e, StemsError) else f"Falló: {type(e).__name__}")
+            _jobs[track_id].update(state="error", message=str(e) if isinstance(e, StemsError) else f"Falló: {type(e).__name__}", finishedAt=time.time())
 
     threading.Thread(target=work, daemon=True).start()
     return dict(_jobs[track_id])

@@ -130,14 +130,17 @@ def mb_genres(mbid):
     return gs
 
 
-def _wait_catalog(limit=300):
-    """La biblioteca también consulta MusicBrainz en segundo plano: se espera a que termine para no pasar de 1/s."""
+def _wait_catalog(limit=45):
+    """La biblioteca también consulta MusicBrainz en segundo plano (1/s). Se le da un margen corto para avanzar (así los géneros
+    de los favoritos entran en el perfil) y después se la pausa: la recomendación no espera a que termine toda la biblioteca."""
     import catalog
 
     t0 = time.time()
     while catalog._genre_job.get("running") and time.time() - t0 < limit:
         _state["step"] = "wait_mb"
-        time.sleep(2)
+        time.sleep(1)
+    catalog.pause_enrichment()
+    time.sleep(1.2)  # deja salir la consulta que esté en vuelo
 
 
 def own_artists():
@@ -638,14 +641,25 @@ def pick_preset(prof, now, preset_id=None):
     return {"id": p["id"], "name": p["name"], "how": how, "data": p}
 
 
-def run(model, kind="daily", request=None, prof=None, now=None, sources=None, save=True):
+def run(*args, **kwargs):
+    """Genera una recomendación; al terminar (o fallar) se reanuda el enriquecimiento de géneros que se pausó."""
+    import catalog
+
+    try:
+        return _run(*args, **kwargs)
+    finally:
+        catalog.resume_enrichment()
+
+
+def _run(model, kind="daily", request=None, prof=None, now=None, sources=None, save=True):
     t0 = time.time()
     now = now or time.time()
     _state.update(step="profile")
     if sources is None:
         sources = load_sources()
     snap = snapshot(now, sources, prof)
-    if not snap["weights"]["artists"] and not snap["weights"]["genres"] and not profile_mod.filled(snap["profile"]):
+    asked = bool((request or {}).get("seed") or (request or {}).get("prompt"))  # un disco o un pedido escrito alcanzan como punto de partida
+    if not asked and not snap["weights"]["artists"] and not snap["weights"]["genres"] and not profile_mod.filled(snap["profile"]):
         raise ValueError("Todavía no hay gustos para armar un perfil: marcá favoritos en tus fuentes o completá Mi perfil.")
     prof = snap["profile"]
     preset = pick_preset(prof, now, (request or {}).get("presetId"))
@@ -723,6 +737,9 @@ def run(model, kind="daily", request=None, prof=None, now=None, sources=None, sa
             artists.add(norm(v["artist"]))
             picked.append(v)
     _state["step"] = "context"
+    import covers
+
+    covers.prefetch([(v["mbid"], v["artist"], v["album"]) for v in picked[:4]])  # mientras se arma el contexto de cada disco
     ask = lambda system, user: ask_text(model, system, user)
     data_dir = settings.effective()["dataDir"]
     for v in picked[:4]:
@@ -937,12 +954,9 @@ def start_scheduler(interval=60):
 
 
 def cover(mbid):
-    """Portada del disco desde Cover Art Archive. No se guarda: la cachea el navegador. None si no hay."""
+    """Portada del disco (caché en disco, TIDAL y Cover Art Archive). None si no hay."""
     if not UUID.match(mbid):
         raise ValueError("Clave inválida.")
-    try:
-        req = urllib.request.Request(f"https://coverartarchive.org/release-group/{mbid}/front-500", headers={"User-Agent": UA})
-        with urllib.request.urlopen(req, timeout=20) as r:
-            return r.read()
-    except Exception:
-        return None
+    import covers
+
+    return covers.get(mbid)

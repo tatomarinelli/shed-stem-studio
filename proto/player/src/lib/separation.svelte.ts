@@ -2,11 +2,41 @@ import { player } from './player.svelte';
 import { stemlist } from './stemlist.svelte';
 
 export interface Job { state: 'idle' | 'running' | 'done' | 'error'; stage?: string; percent?: number; message?: string }
+/** Una separación según el motor: sirve aunque la haya empezado otra pantalla o la página se haya recargado. */
+export interface ActiveJob { id: string; title: string; artist: string; state: 'running' | 'done' | 'error'; stage?: string; percent: number; message: string }
 
 const STAGE_LABEL: Record<string, string> = { download: 'Bajando el tema', model: 'Preparando el modelo', separate: 'Separando', measure: 'Midiendo' };
 
 class Separation {
   jobs = $state<Record<string, Job>>({});
+  /** Lo que el motor está separando (o terminó hace menos de un minuto), con título y artista. */
+  active = $state<ActiveJob[]>([]);
+  #watchers = 0;
+  #timer = 0;
+  #running = new Set<string>();
+
+  get processing() { return this.active.filter(j => j.state === 'running'); }
+  get failed() { return this.active.filter(j => j.state === 'error'); }
+  stageLabel(stage?: string) { return STAGE_LABEL[stage ?? ''] ?? 'Trabajando'; }
+
+  /** Sondea al motor mientras haya alguna pantalla mirando (más seguido si hay algo en curso). */
+  watch(on: boolean) {
+    this.#watchers = Math.max(0, this.#watchers + (on ? 1 : -1));
+    window.clearTimeout(this.#timer);
+    if (this.#watchers > 0) void this.#poll();
+  }
+
+  async #poll() {
+    try {
+      const list: ActiveJob[] = await (await fetch('/engine/stems/jobs')).json();
+      const now = new Set(list.filter(j => j.state === 'running').map(j => j.id));
+      const finished = [...this.#running].some(id => !now.has(id) && list.some(j => j.id === id && j.state === 'done'));
+      this.#running = now;
+      this.active = list;
+      if (finished) { await player.init(); await stemlist.load(); }  // terminó: aparece en la lista de descargados
+    } catch { /* motor apagado: el resto de la interfaz lo informa */ }
+    if (this.#watchers > 0) this.#timer = window.setTimeout(() => void this.#poll(), this.#running.size ? 1200 : 4000);
+  }
 
   label(id: string) {
     const j = this.jobs[id];

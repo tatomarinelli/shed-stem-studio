@@ -3,6 +3,7 @@
   import { player } from '../lib/player.svelte';
   import { ui } from '../lib/ui.svelte';
   import { settings } from '../lib/settings.svelte';
+  import { separation } from '../lib/separation.svelte';
 
   const items: Record<Screen, { label: string; icon: string }> = {
     fuentes: { label: 'Fuentes', icon: 'M4 6h16M4 12h16M4 18h10' },
@@ -12,6 +13,7 @@
     ajustes: { label: 'Ajustes', icon: 'M4 7h10M18 7h2M4 17h2M10 17h10M14 5v4M8 15v4' },
   };
   const idx = $derived(SCREENS.indexOf(nav.screen));
+  const separating = $derived(separation.processing.length > 0);
   const downloads = $derived((settings.services?.jobs ?? []).filter(j => j.kind === 'descarga' || j.kind === 'instalación'));
 </script>
 
@@ -24,6 +26,7 @@
         <a href="#/{s}" class:active={nav.screen === s} aria-current={nav.screen === s ? 'page' : undefined} title={items[s].label} aria-label={items[s].label}>
           <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d={items[s].icon} /></svg>
           <span>{items[s].label}</span>
+          {#if s === 'estudio' && separating}<i class="act" title="Separando un tema" aria-label="Separando un tema"></i>{/if}
         </a>
       </li>
     {/each}
@@ -50,6 +53,8 @@
   nav { transition: width 0.3s var(--ease), padding 0.3s var(--ease); overflow: hidden; position: fixed; top: 12px; bottom: 12px; left: 12px; width: var(--menu-w); display: flex; flex-direction: column; gap: 22px; padding: 18px 12px; border-radius: 18px; background: var(--glass); border: 1px solid var(--glass-line); backdrop-filter: blur(20px) saturate(1.3); box-shadow: 0 24px 60px -28px rgba(0,0,0,0.8); z-index: 10; }
   .brand { font-weight: 700; font-size: 20px; letter-spacing: -0.02em; padding: 0 10px; font-variation-settings: 'wdth' 90; }
   .dl { height: auto; flex: none; display: flex; align-items: center; gap: 8px; margin: 10px 4px 0; padding: 8px 10px; border-radius: 10px; background: rgba(79, 163, 217, 0.12); border: 1px solid rgba(79, 163, 217, 0.35); color: inherit; text-decoration: none; font-size: 13px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+  .act { margin-left: auto; width: 8px; height: 8px; border-radius: 50%; background: #4fa3d9; animation: pulse 1.4s ease-in-out infinite; }
+  nav.collapsed .act { position: absolute; top: 8px; right: 10px; margin: 0; }
   .pulse { width: 8px; height: 8px; border-radius: 50%; background: #4fa3d9; flex: none; animation: pulse 1.4s ease-in-out infinite; }
   @keyframes pulse { 50% { opacity: 0.3; } }
   @media (prefers-reduced-motion: reduce) { .pulse { animation: none; } }

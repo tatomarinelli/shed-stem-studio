@@ -30,6 +30,24 @@ class Services(unittest.TestCase):
         self.assertIn("present", envsetup.status())
 
 
+class SeparationJobs(unittest.TestCase):
+    def test_report_shows_running_and_recent_with_names(self):
+        import time
+
+        stems._jobs.clear()
+        stems._jobs["1"] = {"state": "running", "stage": "separate", "percent": 40, "message": ""}
+        stems._job_meta("1", {"title": "Tema", "artist": "Artista"})
+        stems._jobs["2"] = {"state": "done", "stage": "done", "percent": 100, "message": "", "finishedAt": time.time() - 600}
+        stems._jobs["3"] = {"state": "error", "message": "falló", "finishedAt": time.time() - 5}
+        try:
+            rep = {j["id"]: j for j in stems.jobs_report()}
+            self.assertEqual(set(rep), {"1", "3"})   # el viejo ya no se muestra
+            self.assertEqual((rep["1"]["title"], rep["1"]["percent"]), ("Tema", 40))
+            self.assertEqual([j["label"] for j in services.active_jobs() if j["kind"] == "separación"], ["Tema · Artista"])
+        finally:
+            stems._jobs.clear()
+
+
 class OpenFolder(unittest.TestCase):
     def setUp(self):
         import tempfile

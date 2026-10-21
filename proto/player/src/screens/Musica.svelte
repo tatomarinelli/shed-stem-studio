@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { untrack } from 'svelte';
+  import { untrack, tick } from 'svelte';
   import { music } from '../lib/music.svelte';
   import { seed } from '../lib/seed.svelte';
   import { nav } from '../lib/nav.svelte';
@@ -32,6 +32,9 @@
   let sentinel = $state<HTMLElement>();
   let seq = 0;
 
+  let gridEl = $state<HTMLElement>();
+  let detailEl = $state<HTMLElement>();
+  let cols = $state(1);
   let openAlbum = $state<Album | null>(null);
   let albumTracks = $state<{ title: string; artist: string; album: string; duration: number; ids: Ids }[] | null>(null);
   let albumError = $state('');
@@ -78,6 +81,24 @@
     return () => io.disconnect();
   });
 
+  // El detalle del álbum se abre en la grilla, justo debajo de la fila del álbum elegido (no flota en un costado de la pantalla).
+  $effect(() => {
+    if (!gridEl) return;
+    const el = gridEl;
+    const measure = () => { cols = Math.max(1, getComputedStyle(el).gridTemplateColumns.split(' ').length); };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  });
+  const rowEnd = $derived.by(() => {
+    if (!openAlbum) return -1;
+    const i = items.findIndex(x => x.key === openAlbum!.key);
+    return i < 0 ? -1 : Math.min(items.length - 1, (Math.floor(i / cols) + 1) * cols - 1);
+  });
+  // Si cambia la búsqueda o un filtro, el álbum abierto puede ya no estar: se cierra.
+  $effect(() => { kind; source; artist; genre; debounced; untrack(() => (openAlbum = null)); });
+
   const filtered = $derived(!!(debounced || source || artist || genre));
   const noSources = $derived(!loading && !failed && !filtered && facets.sources.local === 0 && facets.sources.tidal === 0 && !music.working);
   const st = $derived(music.status);
@@ -87,12 +108,15 @@
   const clear = () => { query = ''; source = ''; artist = ''; genre = ''; };
 
   async function open(a: Album) {
+    if (openAlbum?.key === a.key) { openAlbum = null; return; }  // otro clic en el mismo álbum lo cierra
     openAlbum = a; albumTracks = null; albumError = '';
+    tick().then(() => detailEl?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }));
     try {
       const res = await fetch(`/engine/music/album?key=${encodeURIComponent(a.key)}`);
       const r = await res.json();
       if (openAlbum?.key !== a.key) return;
       if (!res.ok) albumError = r.message ?? 'No pude leer el álbum.'; else albumTracks = r.tracks;
+      tick().then(() => detailEl?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }));
     } catch { albumError = 'No pude hablar con el motor.'; }
   }
   const similar = (s: { artist: string; album?: string; title?: string }) => { seed.set(s); nav.go('recomendaciones'); };
@@ -148,8 +172,8 @@
       {#if filtered}<button onclick={clear}>Limpiar filtros</button>{/if}
     </section>
   {:else if kind === 'albums'}
-    <div class="grid">
-      {#each items as it (it.key + (it as Album).tidalId)}
+    <div class="grid" bind:this={gridEl}>
+      {#each items as it, idx (it.key + (it as Album).tidalId)}
         {@const a = asAlbum(it)}
         <button class="card" class:sel={openAlbum?.key === a.key} onclick={() => open(a)} aria-label="{a.title}, {a.artist}">
           <div class="art"><Cover title={a.title} artist={a.artist} size={400} radius={12} src={a.artUrl} /></div>
@@ -157,6 +181,30 @@
           <span class="muted line">{a.artist}{a.year ? `, ${a.year}` : ''}</span>
           {#if !source}<span class="tags">{#each a.sources as s (s)}<em>{SRC[s] ?? s}</em>{/each}</span>{/if}
         </button>
+        {#if openAlbum && idx === rowEnd}
+          <section class="detail" bind:this={detailEl} aria-label="Detalle del álbum">
+            <button class="x ghost" onclick={() => (openAlbum = null)} aria-label="Cerrar" title="Cerrar (Esc)">✕</button>
+            <div class="ah">
+              <Cover title={openAlbum.title} artist={openAlbum.artist} size={132} radius={12} src={openAlbum.artUrl} />
+              <div>
+                <h3>{openAlbum.title}</h3>
+                <span class="muted">{openAlbum.artist}{openAlbum.year ? `, ${openAlbum.year}` : ''}</span>
+                <span class="tags">{#each openAlbum.sources as s (s)}<em>{SRC[s] ?? s}</em>{/each}</span>
+                {#if openAlbum.genres.length}<span class="muted g">{openAlbum.genres.join(', ')}</span>{/if}
+                <button class="primary" onclick={() => similar({ artist: openAlbum!.artist, album: openAlbum!.title })}>Recomendar parecidos</button>
+              </div>
+            </div>
+            {#if albumError}<p class="err" role="alert">{albumError}</p>
+            {:else if !albumTracks}<p class="muted">Cargando temas…</p>
+            {:else}
+              <ul class="list">
+                {#each albumTracks as x, i (i + x.title)}
+                  <TrackRow compact n={i + 1} title={x.title} artist={x.artist} album={x.album} duration={mm(x.duration)} ids={x.ids} art={openAlbum.artUrl} />
+                {:else}<li class="muted">Sin temas.</li>{/each}
+              </ul>
+            {/if}
+          </section>
+        {/if}
       {/each}
     </div>
   {:else}
@@ -170,30 +218,7 @@
   <div bind:this={sentinel} class="sentinel muted">{more ? 'Cargando más…' : ''}</div>
 {/if}
 
-{#if openAlbum}
-  <aside class:lift={player.status === 'ready'} aria-label="Detalle del álbum">
-    <button class="x ghost" onclick={() => (openAlbum = null)} aria-label="Cerrar" title="Cerrar">✕</button>
-    <div class="ah">
-      <Cover title={openAlbum.title} artist={openAlbum.artist} size={120} radius={12} src={openAlbum.artUrl} />
-      <div>
-        <h3>{openAlbum.title}</h3>
-        <span class="muted">{openAlbum.artist}{openAlbum.year ? `, ${openAlbum.year}` : ''}</span>
-        <span class="tags">{#each openAlbum.sources as s (s)}<em>{SRC[s] ?? s}</em>{/each}</span>
-        {#if openAlbum.genres.length}<span class="muted g">{openAlbum.genres.join(', ')}</span>{/if}
-      </div>
-    </div>
-    <button class="primary" onclick={() => similar({ artist: openAlbum!.artist, album: openAlbum!.title })}>Recomendar parecidos</button>
-    {#if albumError}<p class="err" role="alert">{albumError}</p>
-    {:else if !albumTracks}<p class="muted">Cargando temas…</p>
-    {:else}
-      <ul class="list">
-        {#each albumTracks as x, i (i + x.title)}
-          <TrackRow compact n={i + 1} title={x.title} artist={x.artist} album={x.album} duration={mm(x.duration)} ids={x.ids} art={openAlbum.artUrl} />
-        {:else}<li class="muted">Sin temas.</li>{/each}
-      </ul>
-    {/if}
-  </aside>
-{/if}
+<svelte:window onkeydown={e => { if (e.key === 'Escape' && openAlbum && !(e.target instanceof HTMLElement && e.target.matches('input, select, textarea'))) openAlbum = null; }} />
 
 <style>
   .head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
@@ -214,7 +239,7 @@
   .card:hover { background: rgba(255,255,255,0.06); transform: translateY(-2px); }
   .card.sel { background: rgba(255,255,255,0.1); border-color: var(--glass-line); }
   .art { aspect-ratio: 1; border-radius: 12px; overflow: hidden; margin-bottom: 6px; box-shadow: 0 14px 28px -14px rgba(0,0,0,0.8); }
-  .art :global(img), .art :global(svg) { width: 100%; height: 100%; display: block; }
+  .art :global(img), .art :global(svg), .art :global(.cv) { width: 100% !important; height: 100% !important; display: block; }
   .card b, .line { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .card b { font-weight: 600; }
   .line { font-size: 13.5px; }
@@ -229,12 +254,10 @@
   .empty b { font-size: 19px; } .empty p { margin: 0; }
   .btn, .primary { background: var(--text); color: var(--bg); border: 1px solid var(--text); font-weight: 600; border-radius: 9px; padding: 7px 14px; text-decoration: none; justify-self: start; }
   .err { color: var(--loop); margin: 0; }
-  aside { position: fixed; z-index: 15; top: 12px; right: 12px; max-height: calc(100vh - 24px); width: min(520px, calc(100vw - 24px)); overflow: auto; display: grid; align-content: start; gap: 14px; padding: 18px; border-radius: 18px; background: rgba(18, 30, 33, 0.98); border: 1px solid var(--glass-line); backdrop-filter: blur(22px) saturate(1.3); box-shadow: 0 30px 80px -20px rgba(0,0,0,0.9); animation: rise 0.3s var(--ease) both; }
-  aside.lift { max-height: calc(100vh - 142px); }  /* deja libre la barra de transporte */
-  .x { justify-self: end; width: 32px; height: 32px; padding: 0; border-radius: 50%; }
-  .ah { display: flex; gap: 16px; align-items: flex-end; }
+  .detail { grid-column: 1 / -1; position: relative; display: grid; gap: 14px; padding: 18px 20px; border-radius: 18px; background: rgba(255, 255, 255, 0.06); border: 1px solid var(--glass-line); animation: rise 0.3s var(--ease) both; scroll-margin: 70px 0 150px; }
+  .x { position: absolute; top: 12px; right: 12px; width: 32px; height: 32px; padding: 0; border-radius: 50%; }
+  .ah { display: flex; gap: 18px; align-items: flex-end; padding-right: 40px; }
   .ah div { display: grid; gap: 4px; min-width: 0; }
   .ah h3 { margin: 0; font-size: 22px; letter-spacing: -0.01em; }
   .g { font-size: 13px; }
-  @media (max-width: 760px) { aside.lift, aside { max-height: calc(100vh - 102px); } }
 </style>

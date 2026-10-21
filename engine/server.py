@@ -162,6 +162,8 @@ class Handler(BaseHTTPRequestHandler):
             if m:
                 r = analysis.get(m.group(1))
                 return self._send(200, r) if r else self._send(404, {"error": "no_analysis", "message": "Todavía no se analizó este tema."})
+            if path == "/engine/stems/jobs":
+                return self._send(200, stems.jobs_report())
             if path == "/engine/stems/list":
                 return self._send(200, stems.list_separated())
             if path == "/engine/tracks":

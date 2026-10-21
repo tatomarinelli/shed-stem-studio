@@ -23,3 +23,6 @@ CLAUDE.local.md
 START.md
 docs/recs-baseline.json
 docs/agent-notes/model-eval-raw/
+
+# Copias de trabajo de los agentes
+.claude/
