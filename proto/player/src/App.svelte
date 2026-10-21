@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { player } from './lib/player.svelte';
+  import { playback } from './lib/playback.svelte';
   import { nav } from './lib/nav.svelte';
   import SideMenu from './components/SideMenu.svelte';
   import { ui } from './lib/ui.svelte';
@@ -26,8 +27,17 @@
 
   function onKey(e: KeyboardEvent) {
     const t = e.target instanceof HTMLElement ? e.target : document.body;
-    if (player.status !== 'ready' || t.matches('select, input, textarea') || e.ctrlKey || e.metaKey || e.altKey) return;
+    if (t.matches('select, input, textarea') || e.ctrlKey || e.metaKey || e.altKey) return;
     const k = e.key;
+    if (playback.mode === 'player') {  // escucha normal: Espacio y flechas manejan la cola; los atajos del DAW no aplican
+      if (k === ' ' && !t.matches('button, a')) playback.toggle();
+      else if (k === 'ArrowLeft') playback.seek(playback.position - 5);
+      else if (k === 'ArrowRight') playback.seek(playback.position + 5);
+      else return;
+      e.preventDefault();
+      return;
+    }
+    if (player.status !== 'ready') return;
     if (k === '\\') ui.toggleMenu();
     else if ((k === 'Delete' || k === 'Backspace') && player.selectedSection) player.removeSection(player.selectedSection);
     else if (k === 'Escape' && player.selectedSection) player.selectedSection = '';
@@ -77,7 +87,7 @@
   {/key}
 </main>
 
-{#if player.status === 'ready'}<Transport />{/if}
+<Transport />
 <Toast />
 
 <style>

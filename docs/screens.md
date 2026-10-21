@@ -9,7 +9,7 @@ Fuentes  ->  Música  ->  (buscar o elegir de lo guardado)  ->  Reproducir  /  R
 conectar      ver todo                                          escuchar        pedir parecidos                          DAW
 ```
 
-Menú lateral vertical, en este orden: **Fuentes, Música, Recomendaciones, Estudio, Ajustes**. La barra de transporte queda fija abajo en todas.
+Menú lateral vertical, en este orden: **Fuentes, Música, Recomendaciones, Estudio, Ajustes**. La **barra de abajo** (el reproductor) queda fija en todas y toma el control de lo que esté sonando: ver más abajo y `docs/reproductor.md`.
 
 ## Fuentes (solo conexiones)
 
@@ -47,7 +47,16 @@ Queda **exclusivamente para el DAW y la gestión de lo descargado**.
 - **Secciones** (A, B, C…) con inicio y fin propios: `M` marca, clic selecciona, `Supr` borra, se arrastran los bordes, doble clic o `S` repite la sección (el loop queda enlazado a ella y sigue sus cambios), `N` y `P` saltan, `1` a `9` van a una. Se guardan en el navegador.
 - **Análisis** (ver `docs/analysis.md`): tonalidad, tempo y acorde actual arriba; pista de **acordes** sobre la línea de tiempo; **grilla de compases** con su número; **click** en los pulsos detectados (`K`).
 - El menú lateral se achica a íconos (`\`).
+- La barra de abajo con la **skin Estudio** (play, loop, velocidad, estirador y **volumen general**) aparece cuando hay un tema cargado en el DAW.
 - Falta (ver `PLAN.md`): loops guardados en el motor, entrenador de velocidad, transposición, modo "oído primero".
+
+## Barra de abajo (reproductor)
+
+Visible en todas las pantallas mientras haya algo cargado o sonando. Tiene **dos skins** que se funden entre sí:
+- **Estudio** (stems del DAW): lo de siempre + volumen general.
+- **Reproductor** (escucha normal): portada, título y artista, progreso con tiempos y seek, anterior / play-pausa / siguiente, volumen con silencio, cola, "Enviar al Estudio" (separa el tema y muestra el avance; si ya está separado, "Abrir en el Estudio") y "n de total" en álbumes.
+- ▶ en una fila de un álbum reproduce desde ese tema hasta el final; "Escuchar el álbum" empieza por el primero. Un tema suelto de la lista Temas suena solo.
+- El **volumen** se recuerda; doble clic en el fader vuelve a 100 %. Espacio y las teclas de medios manejan lo activo en cualquier pantalla. Detalle en `docs/reproductor.md`.
 
 ## Ajustes
 

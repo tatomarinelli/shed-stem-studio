@@ -47,6 +47,8 @@ class Player {
   metrics = $state({ heapMB: 0, flacMB: 0, loadMs: 0, f32MB: 0, baseLatencyMs: 0, outLatencyMs: 0, engineReady: false });
 
   #ctx: AudioContext | null = null;
+  #master: GainNode | null = null; // volumen general: va entre el motor y la salida
+  masterGain = 1;
   #node: AudioWorkletNode | null = null;
   #data: LoadedTrack | null = null;
   #wasm: WebAssembly.Module | null = null;
@@ -63,11 +65,15 @@ class Player {
   get loopActive() { return this.loopOn && this.loopA != null && this.loopB != null && this.loopB > this.loopA; }
 
   async load(id: string) {
+    preview.stop(); // el Estudio toma el control: una sola cosa suena a la vez
     this.#teardown();
     this.status = 'loading';
     this.error = '';
     try {
       this.#ctx = new AudioContext({ sampleRate: 44100, latencyHint: 'playback' });
+      this.#master = this.#ctx.createGain();
+      this.#master.gain.value = this.masterGain;
+      this.#master.connect(this.#ctx.destination);
       await this.#ctx.audioWorklet.addModule('/worklet.js');
       this.#wasm ??= await WebAssembly.compile(await (await fetch('/rubberband.wasm')).arrayBuffer());
       this.#data = await loadTrack(id, this.#ctx, (done, total, name) => (this.progress = { done, total, name }));
@@ -100,6 +106,7 @@ class Player {
   #teardown() {
     this.#node?.disconnect();
     this.#node = null;
+    this.#master = null;
     void this.#ctx?.close();
     this.#ctx = null;
     this.#data = null;
@@ -131,13 +138,19 @@ class Player {
       else if (m.type === 'pos') { this.#lastPos = m.pos / this.sr; this.#lastAudioT = m.t; this.underruns = m.underruns; }
       else if (m.type === 'ended') { this.playing = false; this.position = this.duration; }
     };
-    node.connect(ctx.destination);
+    node.connect(this.#master ?? ctx.destination);
     this.#node = node;
     this.#lastPos = startFrame / this.sr;
     this.#lastAudioT = ctx.currentTime;
     this.underruns = 0;
     this.metrics.baseLatencyMs = ctx.baseLatency * 1000;
     this.metrics.outLatencyMs = ('outputLatency' in ctx ? ctx.outputLatency : 0) * 1000;
+  }
+
+  /** Volumen general (ya con la curva aplicada). No toca el cabezal ni el click: solo la salida. */
+  setMaster(g: number) {
+    this.masterGain = g;
+    if (this.#master && this.#ctx) this.#master.gain.setTargetAtTime(g, this.#ctx.currentTime, 0.015);
   }
 
   #post(m: object) { this.#node?.port.postMessage(m); }

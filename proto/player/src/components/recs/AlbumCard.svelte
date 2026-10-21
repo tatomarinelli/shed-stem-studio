@@ -3,6 +3,7 @@
   import TrackRow from '../TrackRow.svelte';
   import { recs, type Item, type Reaction } from '../../lib/recs.svelte';
   import { player } from '../../lib/player.svelte';
+  import { queueItem } from '../../lib/playback.svelte';
   import SaveBox from './SaveBox.svelte';
   let saving = $state(false);
 
@@ -16,6 +17,8 @@
   const secs = (n: number | null) => (n == null ? '' : `${Math.floor(n / 60)}:${String(n % 60).padStart(2, '0')}`);
   const cachedIds = $derived(new Set(player.tracks.map(t => t.id)));
   const tracks = $derived(recs.albums[item.mbid]);
+  // ▶ en un tema sigue con los demás del disco.
+  const queue = $derived(tracks?.state === 'ready' ? tracks.tracks.map(t => queueItem({ title: t.title, artist: t.artist, album: item.album, sourceId: t.id, art: `/engine/cover/${item.mbid}`, seconds: t.duration ?? undefined })) : []);
   const size = $derived(big ? 220 : 72);
 </script>
 
@@ -48,7 +51,7 @@
   {#if tracks?.state === 'ready'}
     <ul class="tracks">
       {#each tracks.tracks as t, i (t.id)}
-        <TrackRow compact n={i + 1} title={t.title} artist={t.artist} duration={secs(t.duration)} sourceId={t.id} badge={cachedIds.has(t.id) ? 'Ya separado' : ''} />
+        <TrackRow compact n={i + 1} title={t.title} artist={t.artist} duration={secs(t.duration)} sourceId={t.id} album={item.album} art="/engine/cover/{item.mbid}" {queue} qi={i} badge={cachedIds.has(t.id) ? 'Ya separado' : ''} />
       {/each}
     </ul>
   {:else if tracks?.state === 'missing'}
