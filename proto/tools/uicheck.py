@@ -56,6 +56,7 @@ def main():
     ap.add_argument('url'); ap.add_argument('--wait', type=float, default=2)
     ap.add_argument('--click', action='append', default=[]); ap.add_argument('--text', action='append', default=[])
     ap.add_argument('--eval', action='append', default=[]); ap.add_argument('--shot')
+    ap.add_argument('--size', help='ancho x alto de la ventana, por ejemplo 390x800 (celular)')
     ap.add_argument('--steps-wait', type=float, default=1.2, help='espera tras cada clic')
     a = ap.parse_args()
     prof = tempfile.mkdtemp(prefix='uicheck-'); port = 9400 + os.getpid() % 500
@@ -67,11 +68,14 @@ def main():
             try: tabs = json.load(urllib.request.urlopen(f'http://127.0.0.1:{port}/json')); break
             except Exception: time.sleep(0.2)
         ws = WS([t for t in tabs if t['type'] == 'page'][0]['webSocketDebuggerUrl'])
-        ws.call('Runtime.enable'); ws.call('Page.enable'); ws.call('Page.navigate', {'url': a.url}); time.sleep(a.wait)
+        ws.call('Runtime.enable'); ws.call('Page.enable')
+        if a.size:
+            w, h = (int(x) for x in a.size.lower().split('x')); ws.call('Emulation.setDeviceMetricsOverride', {'width': w, 'height': h, 'deviceScaleFactor': 1, 'mobile': w < 700})
+        ws.call('Page.navigate', {'url': a.url}); time.sleep(a.wait)
         for t in a.click:
             print('>', ws.ev(f"({CLICK})({json.dumps(t)})")); time.sleep(a.steps_wait)
         for js in a.eval:
-            print('= ', json.dumps(ws.ev(js), ensure_ascii=False)[:2000])
+            print('= ', json.dumps(ws.ev(js), ensure_ascii=False)[:2000]); time.sleep(a.steps_wait)
         for sel in (a.text or ['body']):
             print(f'--- texto de {sel} ---'); print((ws.ev(f"(document.querySelector({json.dumps(sel)})||{{}}).innerText||''") or '').strip()[:6000])
         if a.shot:
