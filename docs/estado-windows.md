@@ -25,11 +25,11 @@ Los hashes coinciden con los que calcula el servidor. **Usar la 0.0.3**: la 0.0.
 
 - **Separar un tema de TIDAL: "Error I/O"** (502). `fetch_source` le pasaba la URL https de TIDAL a `ffmpeg`, que está construido con GnuTLS y en Windows solo confía en el almacén del sistema (el mismo defecto que Python, ya corregido en la 0.0.2 para el audio). Reproducido con un servidor https de certificado no confiable: `[tls] Peer certificate failed verification` y `Error opening input: I/O error`; con `-ca_file` funciona. Ahora Python baja el audio con `certifi` y `ffmpeg` solo convierte un archivo local (reintentos, progreso, cancelación); si falla, queda el camino viejo con `-ca_file` para las URL https directas.
 - El log de esa PC (`engine.log`, 120 bytes) no traía el error porque los fallos del trabajo de separación no se registraban: ahora sí (`Separación <id> falló: …`) y el error de `ffmpeg` incluye las dos últimas líneas.
-- **No confirmado todavía en una PC limpia real con la 0.0.3.** El camino DASH (segmentos concatenados en un MP4 fragmentado) no se probó contra TIDAL real; si no convierte, cae al camino viejo.
+- **Confirmado por el usuario en una PC limpia con la 0.0.3: "funciona"** (separar un tema de TIDAL). No se sabe si ese tema llegó por el formato directo (BTS) o por DASH; el camino DASH (segmentos concatenados en un MP4 fragmentado) sigue sin probarse por separado contra TIDAL, y si no convierte cae al camino viejo.
 
 ### Lo que apareció al probar la 0.0.1 en una PC limpia (corregido en la 0.0.2)
 
-- **Audio sin reproducción, 502 `URLError`**: Python en Windows solo confía en el almacén de certificados del sistema, y una PC recién instalada todavía no tiene las raíces de la CDN de TIDAL. El inicio de sesión andaba porque `requests` trae `certifi`. Simulado con el almacén vacío (el error es idéntico al reportado): falla sin el arreglo y valida con `SSL_CERT_FILE` apuntando a `certifi`. **No confirmado todavía en una PC limpia real con la 0.0.2.**
+- **Audio sin reproducción, 502 `URLError`**: Python en Windows solo confía en el almacén de certificados del sistema, y una PC recién instalada todavía no tiene las raíces de la CDN de TIDAL. El inicio de sesión andaba porque `requests` trae `certifi`. Simulado con el almacén vacío (el error es idéntico al reportado): falla sin el arreglo y valida con `SSL_CERT_FILE` apuntando a `certifi`. **Confirmado por el usuario en una PC limpia con la 0.0.2: ya reproduce.**
 - **El enlace de TIDAL no se abría**: dentro de WebView2 los `target="_blank"` no abren nada. La cáscara ahora manda los enlaces externos al navegador del sistema (verificado en su registro `shell.log`) y la interfaz muestra el enlace debajo del botón con un botón para copiarlo.
 El `runtime/` trae Python 3.13.12 embebido, el motor, la interfaz compilada, `tzdata`, `tidalapi` y `uv` 0.13.4 (hash verificado contra el `.sha256` del release). No trae el entorno de separación, ni modelos, ni ffmpeg, ni Ollama: se instalan desde el asistente con un clic.
 
@@ -50,7 +50,7 @@ El `runtime/` trae Python 3.13.12 embebido, el motor, la interfaz compilada, `tz
 - **TIDAL en Windows**: el inicio de sesión funciona (probado por el usuario en la 0.0.1); la reproducción en una PC limpia con la 0.0.2 está por confirmar. Nunca se probó desde acá con una cuenta real.
 - **Botones de Cancelar y el paso de ffmpeg en pantalla**: el motor está probado, la interfaz compila y pasa `svelte-check`, pero no se vieron renderizados con un trabajo en curso.
 - **Instalar ffmpeg y Ollama con winget desde el asistente**: el código está probado con procesos simulados; no se ejecutó la instalación real (en esta PC ya estaban).
-- **Una PC limpia**: esta notebook tiene ffmpeg y Ollama de winget; el comportamiento sin ellos solo se probó con tests.
+- **Una PC limpia, parcialmente**: el usuario confirmó en una PC limpia con la 0.0.3 que reproduce y separa un tema de TIDAL. Cómo se instalaron ffmpeg y Ollama ahí (el asistente con winget, a mano, o ya estaban) y el resto del recorrido no están registrados; en esta notebook ya estaban instalados.
 - **NVIDIA/CUDA e Intel en Windows**: no hay hardware para probar. DXGI y los contadores solo se vieron con AMD.
 - **Desinstalador interactivo**: en modo silencioso no toca los datos; no se probó la casilla de borrar datos del modo con pantalla.
 - **Linux real y Docker**: solo los tests unitarios en WSL; no se levantó Docker ni se probó la RTX 5080.
