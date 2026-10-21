@@ -5,14 +5,21 @@
 # No se descarga ningún modelo solo: se eligen y se bajan desde Ajustes, a la carpeta que indiques.
 name: stemshed
 
+# Los registros de Docker viven en el disco raíz: se acotan para que no crezcan sin límite.
+x-logging: &logging
+  driver: json-file
+  options: { max-size: "10m", max-file: "3" }
+
 services:
   # Prepara las carpetas (Docker las crea como root) y se las entrega al usuario del motor. Corre una vez y termina.
   init:
     image: stemshed-engine:latest
     user: "0:0"
     restart: "no"
-    command: ["sh", "-c", "mkdir -p /models/separation && chown ${STEMSHED_UID:-1000}:${STEMSHED_GID:-1000} /config /data /env /models/separation"]
+    command: ["sh", "-c", "mkdir -p /models/separation && chown ${STEMSHED_UID:-1000}:${STEMSHED_GID:-1000} /config /data /env /models/separation /cache"]
+    logging: *logging
     volumes:
+      - ${STEMSHED_CACHE:-${STEMSHED_HOME:-./data}/cache}:/cache
       - ${STEMSHED_CONFIG:-${STEMSHED_HOME:-./data}/config}:/config
       - ${STEMSHED_DATA:-${STEMSHED_HOME:-./data}/stemshed}:/data
       - ${STEMSHED_ENV:-${STEMSHED_HOME:-./data}/env}:/env
@@ -33,7 +40,16 @@ services:
       STEMSHED_HOST_SEP_MODELS: ${STEMSHED_SEP_MODELS:-${STEMSHED_HOME:-./data}/models/separation}
       STEMSHED_HOST_LLM_MODELS: ${STEMSHED_LLM_MODELS:-${STEMSHED_HOME:-./data}/models/ollama}
       STEMSHED_ORIGINS: ${STEMSHED_ORIGINS:-http://127.0.0.1:5173}
+      # Cachés de las bibliotecas (compilados de CUDA, torch, triton, numba): fuera del contenedor y del disco raíz.
+      XDG_CACHE_HOME: /cache
+      CUDA_CACHE_PATH: /cache/cuda
+      CUDA_CACHE_MAXSIZE: "2147483648"
+      TRITON_CACHE_DIR: /cache/triton
+      TORCH_HOME: /cache/torch
+      MPLCONFIGDIR: /cache/matplotlib
+    logging: *logging
     volumes:
+      - ${STEMSHED_CACHE:-${STEMSHED_HOME:-./data}/cache}:/cache
       - ${STEMSHED_CONFIG:-${STEMSHED_HOME:-./data}/config}:/config
       - ${STEMSHED_DATA:-${STEMSHED_HOME:-./data}/stemshed}:/data
       - ${STEMSHED_ENV:-${STEMSHED_HOME:-./data}/env}:/env                 # entorno de separación (se instala desde Ajustes)
@@ -57,6 +73,7 @@ services:
       - ${STEMSHED_LLM_MODELS:-${STEMSHED_HOME:-./data}/models/ollama}:/root/.ollama/models
     devices:
       - nvidia.com/gpu=all
+    logging: *logging
     healthcheck:
       test: ["CMD", "ollama", "list"]
       interval: 15s
@@ -68,5 +85,6 @@ services:
   web:
     build: { context: .., dockerfile: docker/Dockerfile.web }
     restart: on-failure   # un apagado desde Ajustes no lo reinicia solo
+    logging: *logging
     depends_on: [engine]
     ports: ["127.0.0.1:${STEMSHED_WEB_PORT:-5173}:80"]
