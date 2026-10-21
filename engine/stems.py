@@ -10,9 +10,12 @@ import osenv
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 import threading
 import time
+import urllib.error
+import urllib.request
 from pathlib import Path
 
 ROOT = Path(os.environ.get("STEMSHED_DATA", osenv.default_root("stemshed")))  # caché nueva: la vieja es de solo lectura
@@ -137,25 +140,96 @@ def canonical(filename):
     return name
 
 
-def fetch_source(session, track_id, out_wav, tmp):
-    """El tema en calidad lossless como WAV estéreo de 44,1 kHz (BTS es una URL; DASH necesita su MPD)."""
+def download_source(urls, dest, progress=None, cancelled=None):
+    """Baja las URLs en orden y las concatena en `dest` (un archivo directo, o el inicio y los segmentos de un DASH, que juntos son un MP4
+    fragmentado). Lo hace Python y no ffmpeg: ffmpeg (GnuTLS) en Windows solo confía en el almacén del sistema, y en una PC recién
+    instalada falla con "Input/output error" al abrir el HTTPS de TIDAL; Python usa los certificados de certifi (osenv.use_bundled_ca)."""
+    done = 0
+    with open(dest, "wb") as out:
+        for i, url in enumerate(urls):
+            if not str(url).startswith(("https://", "http://")):
+                raise StemsError("TIDAL devolvió una dirección que no es web.")
+            for attempt in range(3):  # un segmento suelto puede fallar por la red: se reintenta antes de rendirse
+                start = out.tell()
+                try:
+                    req = urllib.request.Request(url, headers={"User-Agent": "ShedStemStudio/0.0.3"})
+                    with urllib.request.urlopen(req, timeout=30) as r:
+                        length = int(r.headers.get("Content-Length") or 0)
+                        got = 0
+                        while True:
+                            if cancelled and cancelled():
+                                raise Cancelled()
+                            chunk = r.read(256 * 1024)
+                            if not chunk:
+                                break
+                            out.write(chunk)
+                            got += len(chunk)
+                            if progress and len(urls) == 1 and length:
+                                progress("download", min(99, int(100 * got / length)))
+                    break
+                except (urllib.error.URLError, OSError, TimeoutError) as e:
+                    if isinstance(e, urllib.error.HTTPError):
+                        e.close()  # una respuesta de error mantiene el socket abierto
+                    out.seek(start)
+                    out.truncate()
+                    if attempt == 2:
+                        raise
+                    time.sleep(1 + attempt)
+            done += 1
+            if progress and len(urls) > 1:
+                progress("download", min(99, int(100 * done / len(urls))))
+    return Path(dest).stat().st_size
+
+
+def _ca_args():
+    try:
+        import certifi
+        return ["-ca_file", certifi.where()]
+    except Exception:
+        return []
+
+
+def _ffmpeg_to_wav(args, out_wav, what):
+    run = subprocess.run(["ffmpeg", "-y", "-loglevel", "error", *args, "-ar", str(SAMPLE_RATE), "-ac", "2", "-c:a", "pcm_s16le", str(out_wav)],
+                         capture_output=True, text=True, encoding="utf-8", errors="replace", **osenv.sys_flags())
+    if run.returncode != 0:
+        lines = run.stderr.strip().splitlines() or ["ffmpeg falló"]
+        raise StemsError(what + ": " + " | ".join(l.strip() for l in lines[-2:])[:300])  # la penúltima línea suele traer la causa (por ejemplo el certificado)
+
+
+def fetch_source(session, track_id, out_wav, tmp, progress=None, cancelled=None):
+    """El tema en calidad lossless como WAV estéreo de 44,1 kHz. Python baja el audio (BTS: un archivo; DASH: inicio y segmentos) y ffmpeg
+    solo convierte un archivo local. Si la descarga en Python falla, se prueba el camino viejo (ffmpeg abre la URL o el MPD)."""
     import tidalapi
 
     session.config.quality = tidalapi.Quality.high_lossless
     stream = session.track(int(track_id)).get_stream()
     manifest = stream.get_stream_manifest()
+    if manifest.is_bts and manifest.encryption_type not in (None, "", "NONE"):
+        raise StemsError("TIDAL devolvió un stream cifrado; no se puede usar.")
+    urls = list(manifest.get_urls())
+    local = Path(tmp) / ("source" + ((manifest.file_extension or ".bin") if manifest.is_bts else ".bin"))
+    why = ""
+    try:
+        download_source(urls, local, progress, cancelled)
+        return _ffmpeg_to_wav(["-i", str(local)], out_wav, "No pude convertir el audio del tema")
+    except Cancelled:
+        raise
+    except StemsError as e:  # lo que se bajó no se pudo convertir (un DASH armado a mano, por ejemplo): se prueba el camino viejo
+        why = f" (el camino directo falló: {str(e)[:90]})"
+    except (urllib.error.URLError, OSError, TimeoutError) as e:
+        why = f" (la descarga directa falló: {type(e).__name__}"
+        reason = getattr(e, "reason", None)
+        why += f", {type(reason).__name__}" if isinstance(reason, BaseException) else ""
+        why += ")"
     if manifest.is_bts:
-        if manifest.encryption_type not in (None, "", "NONE"):
-            raise StemsError("TIDAL devolvió un stream cifrado; no se puede usar.")
-        source, extra = manifest.get_urls()[0], []
+        # ffmpeg (GnuTLS) solo mira el almacén del sistema: se le pasa el paquete de certifi, que con una URL https directa sí respeta (-ca_file)
+        source, extra = urls[0], (_ca_args() if str(urls[0]).startswith("https://") else [])
     else:
         mpd = Path(tmp) / "track.mpd"
         mpd.write_text(stream.get_manifest_data())
         source, extra = str(mpd), ["-protocol_whitelist", "file,http,https,tcp,tls,crypto"]
-    run = subprocess.run(["ffmpeg", "-y", "-loglevel", "error", *extra, "-i", source, "-ar", str(SAMPLE_RATE), "-ac", "2",
-                          "-c:a", "pcm_s16le", str(out_wav)], capture_output=True, text=True)
-    if run.returncode != 0:
-        raise StemsError("No pude bajar el audio del tema: " + (run.stderr.strip().splitlines() or ["ffmpeg falló"])[-1])
+    _ffmpeg_to_wav([*extra, "-i", source], out_wav, "No pude bajar el audio del tema" + why)
 
 
 UNITS = {"": 1, "k": 1e3, "K": 1e3, "M": 1e6, "G": 1e9}
@@ -219,10 +293,7 @@ def track_meta(session, track_id):
 
 
 def fetch_local(path, out_wav):
-    run = subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", str(path), "-ar", str(SAMPLE_RATE), "-ac", "2",
-                          "-c:a", "pcm_s16le", str(out_wav)], capture_output=True, text=True)
-    if run.returncode != 0:
-        raise StemsError("No pude leer el archivo: " + (run.stderr.strip().splitlines() or ["ffmpeg falló"])[-1])
+    _ffmpeg_to_wav(["-i", str(path)], out_wav, "No pude leer el archivo")
 
 
 def _job_meta(track_id, meta):
@@ -268,7 +339,7 @@ def separate(session, track_id, progress, holder=None):
             progress("download", 0)
             meta = track_meta(session, track_id)
             _job_meta(track_id, meta)
-            fetch_source(session, track_id, source, tmp)
+            fetch_source(session, track_id, source, tmp, progress, lambda: bool(holder and holder.get("cancelled")))
         out = Path(tmp) / "out"
         out.mkdir()
         progress("separate", 0)
@@ -345,7 +416,9 @@ def start(session, track_id):
         except Cancelled:
             _jobs[track_id].update(state="cancelled", message="Cancelado", finishedAt=time.time())
         except Exception as e:
-            _jobs[track_id].update(state="error", message=str(e) if isinstance(e, StemsError) else f"Falló: {type(e).__name__}", finishedAt=time.time())
+            msg = str(e) if isinstance(e, StemsError) else f"Falló: {type(e).__name__}"
+            print(f"Separación {track_id} falló: {msg}" + ("" if isinstance(e, StemsError) else f" ({e!r})"[:200]), file=sys.stderr, flush=True)  # queda en engine.log
+            _jobs[track_id].update(state="error", message=msg, finishedAt=time.time())
 
     threading.Thread(target=work, daemon=True).start()
     return dict(_jobs[track_id])
