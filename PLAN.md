@@ -68,6 +68,8 @@ Vías oficiales primero; `tidalapi` / `ytmusicapi` solo como complemento aparte,
 
 Wrapper (Electron o Tauri, decidir con datos) sobre la misma UI. Capa `platform.*`: salida HiFi (exclusiva / bit-perfect, selección de dispositivo, muestra nativa), separación nativa con GPU, archivos sin permisos, atajos globales, bandeja. Extensión de navegador opcional con "Enviar a Shed Stem Studio".
 
+Plan detallado para Windows (instalador, motor portable, GPU, firma, etapas y decisiones abiertas): `docs/windows-instalable.md`.
+
 ## Fase 7: Proveedor de separación (nivel C), empaquetado, licencia, documentación
 
 ## Reglas de trabajo
