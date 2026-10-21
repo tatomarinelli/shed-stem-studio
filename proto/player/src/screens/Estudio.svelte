@@ -132,6 +132,7 @@
           {#if j.artist}<p class="muted">{j.artist}</p>{/if}
           <div class="pbar big" role="progressbar" aria-valuenow={j.percent} aria-valuemin="0" aria-valuemax="100"><i style="width:{Math.max(4, j.percent)}%"></i></div>
           <p class="muted num">{separation.stageLabel(j.stage)} {j.percent ? `${j.percent} %` : '…'} · cuando termine aparece en la lista</p>
+          <button onclick={() => separation.cancel(j.id)}>Cancelar</button>
         {/each}
       </div>
     {:else}

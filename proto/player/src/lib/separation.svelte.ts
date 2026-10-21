@@ -1,7 +1,7 @@
 import { player } from './player.svelte';
 import { stemlist } from './stemlist.svelte';
 
-export interface Job { state: 'idle' | 'running' | 'done' | 'error'; stage?: string; percent?: number; message?: string }
+export interface Job { state: 'idle' | 'running' | 'done' | 'error' | 'cancelled'; stage?: string; percent?: number; message?: string }
 /** Una separación según el motor: sirve aunque la haya empezado otra pantalla o la página se haya recargado. */
 export interface ActiveJob { id: string; title: string; artist: string; state: 'running' | 'done' | 'error'; stage?: string; percent: number; message: string }
 
@@ -45,6 +45,11 @@ class Separation {
   }
 
   get busy() { return Object.values(this.jobs).some(j => j.state === 'running'); }
+
+  /** Corta la separación en curso: el motor termina el separador y descarta lo parcial. */
+  async cancel(id: string) {
+    try { await fetch(`/engine/stems/${id}/cancel`, { method: 'POST' }); } catch { /* el sondeo muestra el estado real */ }
+  }
 
   async start(id: string) {
     this.jobs[id] = { state: 'running', stage: 'download', percent: 0 };

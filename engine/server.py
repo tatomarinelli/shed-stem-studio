@@ -271,6 +271,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(200, services.report())
             if path == "/engine/env/status":
                 return self._send(200, envsetup.status())
+            if path == "/engine/ffmpeg/status":
+                return self._send(200, llmserver.ffmpeg_status())
             if path == "/engine/llm/status":
                 return self._send(200, llmserver.status())
             if path == "/engine/backends":
@@ -340,12 +342,21 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/engine/open-folder":
                 body = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))) or b"{}")
                 return self._send(200, services.open_folder(str(body.get("key", ""))))
+            m = re.fullmatch(rf"/engine/stems/{STEM_ID}/cancel", path)
+            if m:
+                return self._send(200, stems.cancel(m.group(1)))
+            if path == "/engine/env/cancel":
+                return self._send(200, envsetup.cancel())
+            if path == "/engine/models/separation/cancel":
+                return self._send(200, stems.sep_download_cancel())
             if path == "/engine/env/install":
                 body = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))) or b"{}")
                 choice = body.get("backend")
                 if choice is not None and not (isinstance(choice, str) and ID_RE.match(choice)):
                     return self._send(400, {"error": "bad_request", "message": "Motor de separación inválido."})
                 return self._send(200, envsetup.start(choice))
+            if path == "/engine/ffmpeg/install":
+                return self._send(200, llmserver.ffmpeg_install_start())
             if path == "/engine/llm/install":
                 return self._send(200, llmserver.install_start())
             if path == "/engine/models/separation/download":

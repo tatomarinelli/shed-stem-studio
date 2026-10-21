@@ -110,6 +110,31 @@ def ensure_ffmpeg_on_path():
     return bool(folder)
 
 
+def find_uv():
+    """`uv` (Astral): el empaquetado en runtime/tools junto al motor, STEMSHED_UV, o el del PATH solo en Windows. None si no hay:
+    entonces el entorno se crea con venv y pip, como siempre (Linux y Docker no cambian)."""
+    import shutil
+    name = "uv.exe" if WINDOWS else "uv"
+    for cand in (os.environ.get("STEMSHED_UV"), str(Path(__file__).resolve().parent.parent / "tools" / name)):
+        if cand and Path(cand).is_file():
+            return cand
+    return shutil.which("uv") if WINDOWS else None
+
+
+def kill_tree(proc):
+    """Termina un proceso hijo y todo lo que lanzó (el separador, uv, pip). Windows: taskkill /T; el resto: terminate y kill."""
+    if proc is None or proc.poll() is not None:
+        return
+    if WINDOWS:
+        subprocess.run(["taskkill", "/PID", str(proc.pid), "/T", "/F"], capture_output=True, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+    else:
+        proc.terminate()
+        try:
+            proc.wait(5)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+
+
 VENDORS = {0x10DE: "nvidia", 0x1002: "amd", 0x1022: "amd", 0x8086: "intel"}
 
 

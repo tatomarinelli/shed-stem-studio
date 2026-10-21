@@ -13,6 +13,7 @@
   import PresetWizard from '../components/recs/PresetWizard.svelte';
   import BackendPicker from '../components/BackendPicker.svelte';
   import LlmServer from '../components/LlmServer.svelte';
+  import FfmpegSetup from '../components/FfmpegSetup.svelte';
 
   const hw = $derived(settings.hardware);
   const eff = $derived(settings.effective);
@@ -172,7 +173,7 @@
         <p class="where"><Icon name="carpeta" size={16} /><span class="path">{pathOf('separationEnvDir')}</span>
           {#if !inDocker}<button class="ghost" onclick={() => openDir('separationEnvDir')}>Abrir carpeta</button>{/if}</p>
         {#if st?.env.present}<span class="ok">Instalado{st.env.backend ? ` · ${st.env.backend === 'cuda' ? 'NVIDIA (CUDA)' : st.env.backend === 'cpu' ? 'procesador' : st.env.backend}` : ''}</span>
-        {:else if settings.envPull.state === 'running'}<Progress job={settings.envPull} verb="Instalando" />
+        {:else if settings.envPull.state === 'running'}<Progress job={settings.envPull} verb="Instalando" oncancel={() => settings.cancelEnv()} />
         {:else}
           <BackendPicker />
           <button class="primary" disabled={envBlocked} onclick={() => settings.installEnv()}>Instalar</button>
@@ -187,9 +188,10 @@
         <p class="where"><Icon name="carpeta" size={16} /><span class="path">{pathOf('separationModelsDir')}</span>
           {#if !inDocker}<button class="ghost" onclick={() => openDir('separationModelsDir')}>Abrir carpeta</button>{/if}</p>
         {#if st?.separation[0]?.present}<span class="ok">Descargado</span>
-        {:else if settings.sepPull.state === 'running'}<Progress job={settings.sepPull} />
+        {:else if settings.sepPull.state === 'running'}<Progress job={settings.sepPull} oncancel={() => settings.cancelSepModel()} />
         {:else}
-          <button class="primary" disabled={!st?.env.present} onclick={() => settings.pullSeparation()}>Descargar</button>
+          <FfmpegSetup />
+          <button class="primary" disabled={!st?.env.present || settings.ffmpeg?.installed === false} onclick={() => settings.pullSeparation()}>Descargar</button>
           {#if !st?.env.present}<span class="muted">Primero el entorno.</span>{/if}
           {#if settings.sepPull.state === 'error'}<span class="warn" role="alert">{settings.sepPull.message}</span>{/if}
         {/if}

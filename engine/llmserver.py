@@ -47,19 +47,20 @@ def status():
             "accel": best["llmAccel"] if best else "cpu", "gpu": best["name"] if best else None, "job": dict(_job)}
 
 
-def install_start():
+def start_winget(job, package, is_installed, after=None):
+    """Instala `package` con winget en segundo plano, mostrando el avance en `job`. Solo Windows; solo por un clic."""
     if not can_install():
-        raise LlmServerError("En este sistema Ollama se instala desde ollama.com.")
+        raise LlmServerError("En este sistema se instala desde su sitio oficial.")
     with _lock:
-        if _job["state"] == "running":
+        if job["state"] == "running":
             raise LlmServerError("Ya se está instalando.")
-        if osenv.find_ollama():
-            raise LlmServerError("Ollama ya está instalado.")
-        _job.update(state="running", percent=0, message="", step="Descargando Ollama", done=0, total=0)
+        if is_installed():
+            raise LlmServerError("Ya está instalado.")
+        job.update(state="running", percent=0, message="", step="Descargando", done=0, total=0)
 
     def work():
         try:
-            proc = subprocess.Popen(["winget", "install", "--id", WINGET_ID, "-e", "--silent", "--disable-interactivity",
+            proc = subprocess.Popen(["winget", "install", "--id", package, "-e", "--silent", "--disable-interactivity",
                                      "--accept-package-agreements", "--accept-source-agreements"],
                                     stdout=subprocess.PIPE, stderr=subprocess.STDOUT, **osenv.sys_flags())
             tail, buf = [], b""
@@ -76,18 +77,35 @@ def install_start():
                         continue
                     p = parse_progress(line)
                     if p and p[1]:
-                        _job.update(done=p[0], total=p[1], percent=min(95, int(100 * p[0] / p[1])), step="Descargando Ollama")
+                        job.update(done=p[0], total=p[1], percent=min(95, int(100 * p[0] / p[1])), step="Descargando")
                     elif re.search(r"install", line, re.I) and "Starting" in line:
-                        _job.update(step="Instalando", percent=96)
+                        job.update(step="Instalando", percent=96)
                     elif any(c.isalpha() for c in line):
                         tail = (tail + [line])[-4:]
             proc.wait()
-            if proc.returncode != 0 or not osenv.find_ollama():
+            if proc.returncode != 0 or not is_installed():
                 raise LlmServerError("La instalación falló: " + " | ".join(tail[-2:])[:200])
-            models.ensure_ollama()
-            _job.update(state="done", percent=100, step="Listo")
+            if after:
+                after()
+            job.update(state="done", percent=100, step="Listo")
         except Exception as e:
-            _job.update(state="error", message=str(e) if isinstance(e, LlmServerError) else f"Falló: {type(e).__name__}")
+            job.update(state="error", message=str(e) if isinstance(e, LlmServerError) else f"Falló: {type(e).__name__}")
 
     threading.Thread(target=work, daemon=True).start()
-    return dict(_job)
+    return dict(job)
+
+
+def install_start():
+    return start_winget(_job, WINGET_ID, lambda: bool(osenv.find_ollama()), models.ensure_ollama)
+
+
+# ffmpeg: lo pide audio-separator hasta para bajar el modelo. Se instala con winget (Gyan.FFmpeg) solo con un clic.
+_ffmpeg_job = {"state": "idle", "percent": 0, "message": "", "step": "", "done": 0, "total": 0}
+
+
+def ffmpeg_status():
+    return {"installed": bool(osenv.find_ffmpeg()), "canInstall": can_install(), "job": dict(_ffmpeg_job)}
+
+
+def ffmpeg_install_start():
+    return start_winget(_ffmpeg_job, "Gyan.FFmpeg", lambda: bool(osenv.find_ffmpeg()), osenv.ensure_ffmpeg_on_path)

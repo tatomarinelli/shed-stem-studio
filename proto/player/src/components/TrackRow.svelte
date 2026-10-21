@@ -81,6 +81,7 @@
       </button>
     {:else if job?.state === 'running'}
       <span class="pct num" role="status" title={separation.label(pid!)}>{job.percent ?? 0} %</span>
+      <button class="ib sep" onclick={() => separation.cancel(pid!)} title="Cancelar la separación">Cancelar</button>
     {:else}
       <button class="ib sep" disabled={separation.busy || resolving} onclick={separate} title={separation.busy ? 'Ya hay una separación en curso' : 'Separar en instrumentos para estudiar'}>Separar</button>
     {/if}

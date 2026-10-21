@@ -44,6 +44,7 @@ def sep_model_present():
 
 
 _dl = {"state": "idle", "percent": 0, "message": "", "done": 0, "total": 0, "rate": 0}
+_dl_holder = {}  # proceso de la descarga, si se canceló y si el modelo ya estaba antes
 _dl_lock = threading.Lock()
 
 
@@ -56,10 +57,13 @@ def sep_download_start():
     py_sep = osenv.env_bin(ENV, "audio-separator")
     if not py_sep.exists():
         raise StemsError("Falta el entorno de separación en " + str(ENV))
+    require_ffmpeg()
     with _dl_lock:
         if _dl["state"] == "running":
             raise StemsError("Ya hay una descarga en curso.")
         _dl.update(state="running", percent=0, message="", done=0, total=0, rate=0)
+        _dl_holder.clear()
+        _dl_holder["had"] = sep_model_present()
 
     def work():
         try:
@@ -74,7 +78,13 @@ def sep_download_start():
                     _dl.update(got)
 
             code, tail = run_separator([str(py_sep), "--download_model_only", "--model_filename", MODEL_FILE, "--model_file_dir", str(MODELS_DIR)],
-                                       {**os.environ}, progress, on_line)
+                                       {**os.environ}, progress, on_line, _dl_holder)
+            if _dl_holder.get("cancelled"):
+                if not _dl_holder["had"]:  # una descarga cortada deja un .ckpt a medias que sep_model_present() daría por bueno
+                    for f in SEP_FILES:
+                        (MODELS_DIR / f).unlink(missing_ok=True)
+                _dl.update(state="cancelled", percent=0)
+                return
             if code != 0 or not sep_model_present():
                 raise StemsError("No se pudo descargar: " + (tail.strip().splitlines() or ["sin salida"])[-1][:200])
             _dl.update(state="done", percent=100)
@@ -83,6 +93,14 @@ def sep_download_start():
 
     threading.Thread(target=work, daemon=True).start()
     return dict(_dl)
+
+
+def sep_download_cancel():
+    if _dl["state"] != "running":
+        raise StemsError("No hay una descarga en curso.")
+    _dl_holder["cancelled"] = True
+    osenv.kill_tree(_dl_holder.get("proc"))
+    return {"state": "cancelling"}
 
 
 def norm_id(track_id):
@@ -95,6 +113,12 @@ def norm_id(track_id):
 
 class StemsError(Exception):
     pass
+
+
+def require_ffmpeg():
+    """audio-separator y la conversión de archivos lo necesitan; sin esto fallaban con un FileNotFoundError opaco."""
+    if not osenv.ensure_ffmpeg_on_path():
+        raise StemsError("Falta ffmpeg. Instalalo desde el asistente (paso de modelos) o desde ffmpeg.org.")
 
 
 def cache_dir(track_id):
@@ -154,8 +178,15 @@ def parse_progress(chunk):
     return ("model" if "iB/s" in chunk or "iB]" in chunk else "separate", int(found.group(1)))
 
 
-def run_separator(cmd, env, progress, on_line=None):
+class Cancelled(Exception):
+    """El usuario canceló el trabajo: no es un error."""
+
+
+def run_separator(cmd, env, progress, on_line=None, holder=None):
+    """`holder` (dict): guarda el proceso para que cancel() pueda terminarlo."""
     proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=env, **osenv.sys_flags())
+    if holder is not None:
+        holder["proc"] = proc
     tail, last, buffer = [], None, b""
     while True:
         data = proc.stdout.read1(4096)
@@ -205,18 +236,21 @@ def jobs_report():
     now = time.time()
     out = []
     for tid, j in list(_jobs.items()):
+        if j.get("state") == "cancelled":
+            continue
         if j.get("state") == "running" or now - j.get("finishedAt", now) < 60:
             out.append({"id": tid, "title": j.get("title", ""), "artist": j.get("artist", ""), "state": j["state"],
                         "stage": j.get("stage"), "percent": j.get("percent", 0), "message": j.get("message", "")})
     return out
 
 
-def separate(session, track_id, progress):
+def separate(session, track_id, progress, holder=None):
     py, sep = osenv.env_bin(ENV, "python"), osenv.env_bin(ENV, "audio-separator")
     if not py.exists() or not sep.exists():
         raise StemsError("Falta el entorno de separación en " + str(ENV))
     if not sep_model_present():  # sin esto, audio-separator lo bajaría solo
         raise StemsError("Falta el modelo de separación. Descargalo en Ajustes.")
+    require_ffmpeg()
     (ROOT / "tmp").mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(dir=ROOT / "tmp") as tmp:  # el audio original no sale de este bloque
         source = Path(tmp) / "source.wav"
@@ -240,7 +274,9 @@ def separate(session, track_id, progress):
         progress("separate", 0)
         code, tail = run_separator(
             [str(sep), str(source), "--model_filename", MODEL_FILE, "--model_file_dir", str(MODELS_DIR),
-             "--output_dir", str(out), "--output_format", "FLAC"], {**os.environ, **osenv.tmp_env(ROOT / "tmp")}, progress)
+             "--output_dir", str(out), "--output_format", "FLAC"], {**os.environ, **osenv.tmp_env(ROOT / "tmp")}, progress, holder=holder)
+        if holder is not None and holder.get("cancelled"):
+            raise Cancelled()  # el bloque `with` borra el audio temporal y no se escribe nada en la caché
         files = sorted(out.glob("*.flac"))
         if code != 0 or not files:
             raise StemsError("La separación falló: " + (tail.strip().splitlines() or ["sin salida"])[-1][:200])
@@ -266,7 +302,20 @@ def separate(session, track_id, progress):
 
 # --- un solo trabajo a la vez (la GPU es una sola)
 _jobs = {}
+_holders = {}  # track_id -> {"proc": Popen, "cancelled": bool}: lo que cancel() necesita
 _jobs_lock = threading.Lock()
+
+
+def cancel(track_id):
+    """Cancela la separación en curso: termina el separador y todo lo que lanzó, y descarta lo parcial."""
+    track_id = norm_id(track_id)
+    with _jobs_lock:
+        if _jobs.get(track_id, {}).get("state") != "running":
+            raise StemsError("No hay una separación en curso para ese tema.")
+        holder = _holders.setdefault(track_id, {})
+        holder["cancelled"] = True
+    osenv.kill_tree(holder.get("proc"))
+    return {"state": "cancelling"}
 
 
 def start(session, track_id):
@@ -282,14 +331,19 @@ def start(session, track_id):
         if any(j["state"] == "running" for j in _jobs.values()):
             raise StemsError("Ya hay una separación en curso: esperá a que termine.")
         _jobs[track_id] = {"state": "running", "stage": "download", "percent": 0, "message": ""}
+        holder = _holders[track_id] = {}
 
     def progress(stage, percent):
         _jobs[track_id].update(stage=stage, percent=percent)
+        if holder.get("cancelled") and stage != "download":
+            raise Cancelled()
 
     def work():
         try:
-            separate(session, track_id, progress)
+            separate(session, track_id, progress, holder)
             _jobs[track_id].update(state="done", stage="done", percent=100, finishedAt=time.time())
+        except Cancelled:
+            _jobs[track_id].update(state="cancelled", message="Cancelado", finishedAt=time.time())
         except Exception as e:
             _jobs[track_id].update(state="error", message=str(e) if isinstance(e, StemsError) else f"Falló: {type(e).__name__}", finishedAt=time.time())
 

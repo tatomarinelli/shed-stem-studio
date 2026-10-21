@@ -8,6 +8,7 @@
 param([switch]$SkipInstaller, [switch]$SkipUi)
 $ErrorActionPreference = "Stop"
 $PyVersion = "3.13.12"
+$UvVersion = "0.13.4"
 $Root   = Resolve-Path (Join-Path $PSScriptRoot "..\..")
 $Win    = Join-Path $Root "windows"
 $Cache  = Join-Path $PSScriptRoot "cache"
@@ -51,7 +52,7 @@ Copy-Item $whl.FullName "$sp\tzdata.zip"; Expand-Archive "$sp\tzdata.zip" $sp -F
 
 Step "Dependencias del motor (tidalapi)"
 $wheels = Join-Path $Cache "wheels"
-$reqEngine = Join-Path $Root "engineequirements-engine.txt"
+$reqEngine = Join-Path $Root "engine\requirements-engine.txt"
 New-Item -ItemType Directory -Force $wheels | Out-Null
 # pyaes y ratelimit solo existen como código fuente: se compilan a wheel (Python puro) con el pip del sistema; el resto se resuelve para el Python embebido.
 python -m pip wheel -r $reqEngine -w $wheels --quiet
@@ -62,12 +63,34 @@ if ($LASTEXITCODE) { throw "falló la instalación de las dependencias del motor
 Step "Motor (engine\*.py, sin pruebas)"
 Get-ChildItem (Join-Path $Root "engine") -File | Where-Object { $_.Extension -in ".py", ".txt", ".json" } | Copy-Item -Destination (Join-Path $Rt "engine")
 Copy-Item (Join-Path $Root "LICENSE") $Rt
-"Python $PyVersion (PSF), tzdata (Apache-2.0). Shed Stem Studio es GPL-3.0-or-later: ver LICENSE y el repositorio del proyecto para el código fuente." | Set-Content (Join-Path $Rt "AVISOS.txt") -Encoding utf8
+"Python $PyVersion (PSF), tzdata (Apache-2.0), tidalapi (LGPL-3.0-or-later) y sus dependencias (cada una con su licencia en su carpeta .dist-info de Lib\site-packages), uv $UvVersion (MIT o Apache-2.0). Shed Stem Studio es GPL-3.0-or-later: ver LICENSE y el repositorio del proyecto para el código fuente." | Set-Content (Join-Path $Rt "AVISOS.txt") -Encoding utf8
+
+Step "uv $UvVersion (crea el entorno de separación sin Python instalado)"
+$uvZip = Join-Path $Cache "uv-$UvVersion-x86_64-pc-windows-msvc.zip"
+$uvUrl = "https://github.com/astral-sh/uv/releases/download/$UvVersion/uv-x86_64-pc-windows-msvc.zip"
+if (-not (Test-Path $uvZip)) { Invoke-WebRequest $uvUrl -OutFile $uvZip }
+# El hash sale del archivo .sha256 que publica el propio release; si no coincide, se descarta lo bajado y se corta.
+$shaResp = (Invoke-WebRequest "$uvUrl.sha256" -UseBasicParsing).Content
+if ($shaResp -is [byte[]]) { $shaResp = [Text.Encoding]::ASCII.GetString($shaResp) }   # el release lo publica como binario
+$want = ($shaResp.Trim() -split "\s+")[0].ToLower()
+if ($want -notmatch "^[0-9a-f]{64}$") { throw "no pude leer el hash publicado de uv: $shaResp" }
+$have = (Get-FileHash $uvZip -Algorithm SHA256).Hash.ToLower()
+if ($want -ne $have) { Remove-Item $uvZip -Force; throw "el hash de uv no coincide (esperado $want, obtenido $have)" }
+$tools = Join-Path $Rt "tools"
+New-Item -ItemType Directory -Force $tools | Out-Null
+$uvTmp = Join-Path $Cache "uv-extract"
+if (Test-Path $uvTmp) { Remove-Item -Recurse -Force $uvTmp }
+Expand-Archive $uvZip $uvTmp -Force
+Copy-Item (Get-ChildItem $uvTmp -Recurse -Filter uv.exe | Select-Object -First 1).FullName $tools
 
 Step "Prueba del runtime armado (sin ventana)"
 $py = Join-Path $Rt "python\python.exe"
 & $py -I -c "import sys; sys.path.insert(0, r'$Rt\engine'); import osenv, webui, server, tidalapi; from zoneinfo import ZoneInfo; ZoneInfo('America/Argentina/Buenos_Aires'); print('runtime ok')"
 if ($LASTEXITCODE) { throw "el runtime no importa el motor" }
+& (Join-Path $tools "uv.exe") --version
+if ($LASTEXITCODE) { throw "uv no arranca" }
+& $py -I -c "import sys; sys.path.insert(0, r'$Rt\engine'); import osenv; assert osenv.find_uv(), 'el motor no encuentra uv empaquetado'; print('uv empaquetado:', osenv.find_uv())"
+if ($LASTEXITCODE) { throw "el motor no encuentra uv" }
 
 Step "Cáscara (Tauri, release)"
 Push-Location $Shell

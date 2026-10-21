@@ -33,7 +33,9 @@ Requisitos: Node, Rust (`rustup`) y las herramientas de C++ de Visual Studio.
 powershell -ExecutionPolicy Bypass -File windows\build\build.ps1            # zip + instalador
 powershell -ExecutionPolicy Bypass -File windows\build\build.ps1 -SkipInstaller
 ```
-Descarga una vez (a `build/cache`): Python embebible de python.org y `tzdata`.
+Descarga una vez (a `build/cache`): Python embebible de python.org, `tzdata`, las dependencias del motor (`engine/requirements-engine.txt`) y `uv` (versión fijada y verificada con el `.sha256` de su release). El runtime se prueba solo (importa el motor y arranca `uv`) antes de compilar la cáscara.
+
+Estado y lo que falta: `docs/estado-windows.md`.
 
 ## Pendiente
 Ver el registro de `docs/windows-agentes.md`. Sin hacer: instalación del entorno de separación con `uv`, asistente de primeros pasos en Windows, bandeja, diálogo nativo de carpetas, firma de código, actualizaciones.

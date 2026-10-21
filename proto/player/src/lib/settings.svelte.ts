@@ -21,7 +21,7 @@ export interface LlmServer {
 }
 export interface Config { audioSources: string[]; dataDir: string; ollamaModelsDir: string; separationModelsDir: string; separationEnvDir: string; musicFolders: string[]; llmUrl: string; llmModel: string }
 export interface AudioSource { id: 'local' | 'tidal'; label: string; enabled: boolean; available: boolean; detail: string }
-export interface Pull { state: 'idle' | 'running' | 'done' | 'error'; percent?: number; message?: string; done?: number; total?: number; rate?: number; step?: string; approx?: boolean }
+export interface Pull { state: 'idle' | 'running' | 'done' | 'error' | 'cancelled'; percent?: number; message?: string; done?: number; total?: number; rate?: number; step?: string; approx?: boolean }
 export interface Job { kind: string; label: string; percent?: number; step?: string }
 export interface Services {
   engine: { host: string; port: number; pid: number; uptimeSec: number; docker: boolean; origins: string[]; hostPaths: Record<string, { path: string; var: string }> };
@@ -138,6 +138,32 @@ class Settings {
   #sepTimer = 0;
   #envTimer = 0;
   envPull = $state<Pull>({ state: 'idle' });
+
+  ffmpeg = $state<{ installed: boolean; canInstall: boolean; job: Pull } | null>(null);
+  #ffTimer = 0;
+
+  async loadFfmpeg() {
+    try {
+      const res = await fetch('/engine/ffmpeg/status');
+      if (res.ok) this.ffmpeg = await res.json();
+    } catch { /* sin motor: el estado general lo informa */ }
+  }
+
+  async installFfmpeg() {
+    const res = await fetch('/engine/ffmpeg/install', { method: 'POST' });
+    const body = await res.json();
+    if (!res.ok) { if (this.ffmpeg) this.ffmpeg = { ...this.ffmpeg, job: { state: 'error', message: body.message } }; return; }
+    if (this.ffmpeg) this.ffmpeg = { ...this.ffmpeg, job: body };
+    window.clearInterval(this.#ffTimer);
+    this.#ffTimer = window.setInterval(async () => {
+      await this.loadFfmpeg();
+      if (this.ffmpeg?.job.state === 'running') return;
+      window.clearInterval(this.#ffTimer);
+    }, 2000);
+  }
+
+  async cancelEnv() { await fetch('/engine/env/cancel', { method: 'POST' }); }
+  async cancelSepModel() { await fetch('/engine/models/separation/cancel', { method: 'POST' }); }
 
   llm = $state<LlmServer | null>(null);
   #llmTimer = 0;

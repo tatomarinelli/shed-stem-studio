@@ -129,7 +129,7 @@
           <div><b>Falta el entorno de separación</b> <span class="muted">unos {st.env.approxGb} GB, se instala en {st.env.path}</span></div>
           <div class="act">
             {#if settings.envPull.state === 'running'}
-              <Progress job={settings.envPull} verb="Instalando" />
+              <Progress job={settings.envPull} verb="Instalando" oncancel={() => settings.cancelEnv()} />
             {:else}
               <BackendPicker />
               <button class="primary" onclick={() => settings.installEnv()}>Instalar</button>
@@ -146,7 +146,7 @@
             {#if !m.present && m.label === st.separationInUse}
               <div class="act">
                 {#if settings.sepPull.state === 'running'}
-                  <Progress job={settings.sepPull} />
+                  <Progress job={settings.sepPull} oncancel={() => settings.cancelSepModel()} />
                 {:else}
                   <button class="primary" onclick={() => settings.pullSeparation()}>Descargar</button>
                   {#if settings.sepPull.state === 'error'}<span class="warn" role="alert">{settings.sepPull.message}</span>{/if}
