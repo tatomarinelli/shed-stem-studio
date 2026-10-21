@@ -2,6 +2,8 @@
 
 Webapp local-first (y luego app de escritorio) para estudiar música con stems separados por IA y recibir una recomendación diaria. Leé `PLAN.md` (plan operativo) y `docs/architecture.md` (arquitectura) antes de trabajar.
 
+Trabajo en la versión de Windows (nativa, sin Docker): leé `docs/windows-agentes.md`.
+
 ## Idioma
 Interfaz y textos en español rioplatense (voseo), cortos y sin verbosidad.
 
