@@ -9,7 +9,9 @@ Actualizado: 2026-10-21, notebook con Windows 11 Pro (build 26200), Ryzen 9 6900
 | Zip portable (`ShedStemStudio.exe` + `runtime/`) | 28,8 MB | `windows/build/out/ShedStemStudio-portable-0.0.1.zip` (no se versiona) |
 | Instalador NSIS por usuario, sin administrador | 21,9 MB | `windows/build/out/Shed Stem Studio_0.0.1_x64-setup.exe` |
 
-Se arman con `powershell -ExecutionPolicy Bypass -File windows\build\build.ps1`. Sin firma de código: SmartScreen avisa. **No se publicó ninguna release en GitHub.**
+Se arman con `powershell -ExecutionPolicy Bypass -File windows\build\build.ps1`. Sin firma de código: SmartScreen avisa.
+
+**Publicado** el 2026-10-21 como pre-lanzamiento: https://github.com/tatomarinelli/shed-stem-studio/releases/tag/v0.0.1 (tag `v0.0.1` sobre el commit `9029abd`). SHA-256: instalador `5621ac0a…2485`, zip `91208a6d…3b5a`; coinciden con los del servidor. El instalador se subió como `ShedStemStudio_0.0.1_x64-setup.exe` (GitHub cambia los espacios por puntos).
 El `runtime/` trae Python 3.13.12 embebido, el motor, la interfaz compilada, `tzdata`, `tidalapi` y `uv` 0.13.4 (hash verificado contra el `.sha256` del release). No trae el entorno de separación, ni modelos, ni ffmpeg, ni Ollama: se instalan desde el asistente con un clic.
 
 ## Verificado (con datos)
@@ -43,7 +45,7 @@ El `runtime/` trae Python 3.13.12 embebido, el motor, la interfaz compilada, `tz
 
 ## Para retomar
 
-1. **Release**: decidir si se publica en GitHub Releases (el zip y el instalador están listos; sin firma). Antes, probar una PC limpia (una VM o una cuenta nueva).
+1. **Release**: ya está publicado como pre-lanzamiento. Falta probarlo en una PC limpia (una VM o una cuenta nueva) y decidir la firma antes de una versión estable. Los archivos del release no se versionan: se reconstruyen con `build.ps1`.
 2. **Firma de código** (decisión abierta) y **actualizaciones**.
 3. **Verificar CUDA en Windows** con la RTX 5080 (hace falta Windows en esa PC) y TIDAL.
 4. **DirectML**: etapas 0 a 4 de `docs/plan-directml.md`.
