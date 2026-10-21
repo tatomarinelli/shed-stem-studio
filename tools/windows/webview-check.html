@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="es"><meta charset="utf-8"><title>Comprobación del navegador</title>
+<style>body{font:15px system-ui;margin:24px;background:#0f1a1d;color:#e8f0f0}table{border-collapse:collapse}td,th{border:1px solid #2a3b3f;padding:6px 12px;text-align:left}
+.ok{color:#7cc7a3}.no{color:#ff8a8a}button{font:inherit;padding:8px 14px;margin:6px 6px 6px 0}pre{background:#162428;padding:12px;white-space:pre-wrap}</style>
+<h1>Comprobación del navegador</h1>
+<p>Abrila en Edge y dentro de la ventana WebView2. Después copiá el resultado de abajo.</p>
+<table id="t"><tr><th>Prueba</th><th>Resultado</th></tr></table>
+<p><button id="beep">Reproducir un tono (oír)</button><button id="copy">Copiar resultado</button></p>
+<pre id="json"></pre>
+<script>
+const res = {};
+const rows = document.getElementById('t');
+function add(name, ok, detail = '') {
+  res[name] = { ok, detail: String(detail) };
+  const tr = rows.insertRow();
+  tr.insertCell().textContent = name;
+  const c = tr.insertCell();
+  c.className = ok ? 'ok' : 'no';
+  c.textContent = (ok ? 'sí' : 'no') + (detail ? ' — ' + detail : '');
+}
+(async () => {
+  add('Navegador', true, navigator.userAgent);
+  add('Aislamiento de origen (crossOriginIsolated)', self.crossOriginIsolated === true, self.crossOriginIsolated);
+  let sab = false; try { new SharedArrayBuffer(8); sab = true; } catch {}
+  add('SharedArrayBuffer', sab);
+  add('Web Audio', !!window.AudioContext);
+  try {
+    const ctx = new AudioContext();
+    add('Frecuencia de muestreo', true, ctx.sampleRate + ' Hz');
+    add('Latencia base / de salida', true, `${(ctx.baseLatency * 1000).toFixed(1)} ms / ${ctx.outputLatency ? (ctx.outputLatency * 1000).toFixed(1) + ' ms' : 'sin dato'}`);
+    const code = 'class P extends AudioWorkletProcessor{process(i,o){o[0][0].fill(0);return true}}registerProcessor("p",P)';
+    const url = URL.createObjectURL(new Blob([code], { type: 'text/javascript' }));
+    try { await ctx.audioWorklet.addModule(url); new AudioWorkletNode(ctx, 'p'); add('AudioWorklet', true); }
+    catch (e) { add('AudioWorklet', false, e.message); }
+    document.getElementById('beep').onclick = async () => {
+      await ctx.resume(); const o = ctx.createOscillator(), g = ctx.createGain(); g.gain.value = 0.1;
+      o.connect(g).connect(ctx.destination); o.start(); o.stop(ctx.currentTime + 0.6);
+    };
+  } catch (e) { add('Web Audio (crear contexto)', false, e.message); }
+  let simd = false; try { simd = WebAssembly.validate(new Uint8Array([0,97,115,109,1,0,0,0,1,5,1,96,0,1,123,3,2,1,0,10,10,1,8,0,65,0,253,15,253,98,11])); } catch {}
+  add('WebAssembly SIMD', simd);
+  add('WebAssembly hilos (memoria compartida)', typeof SharedArrayBuffer !== 'undefined' && (() => { try { new WebAssembly.Memory({ initial: 1, maximum: 2, shared: true }); return true; } catch { return false; } })());
+  let gpu = 'no disponible';
+  if (navigator.gpu) { try { const a = await navigator.gpu.requestAdapter(); gpu = a ? 'adaptador disponible' : 'sin adaptador'; } catch (e) { gpu = e.message; } }
+  add('WebGPU', gpu === 'adaptador disponible', gpu);
+  add('Núcleos lógicos', true, navigator.hardwareConcurrency);
+  add('Memoria aproximada del dispositivo', true, (navigator.deviceMemory || 'sin dato') + ' GB');
+  document.getElementById('json').textContent = JSON.stringify(res, null, 1);
+  document.getElementById('copy').onclick = () => navigator.clipboard.writeText(document.getElementById('json').textContent);
+})();
+</script></html>
