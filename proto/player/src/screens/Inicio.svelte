@@ -49,6 +49,13 @@
   const envFree = $derived(freeFor(eff?.separationEnvDir));
   const envBlocked = $derived(envFree !== null && envFree < 10);
 
+  // ---- dónde quedó cada cosa
+  type DirKey = 'dataDir' | 'separationEnvDir' | 'separationModelsDir' | 'ollamaModelsDir';
+  const inDocker = $derived(!!settings.services?.engine.docker);
+  const pathOf = (key: DirKey) => settings.services?.engine.hostPaths[key]?.path ?? eff?.[key] ?? '';
+  let openError = $state('');
+  async function openDir(key: DirKey) { openError = await settings.openFolder(key); }
+
   // ---- modelo de recomendaciones
   let customModel = $state('');
   const candidate = $derived(hw?.models.find(m => m.module === 'recomendaciones'));
@@ -151,9 +158,12 @@
         {#if hw && !hw.gpus.length}<span class="warn" role="alert">Sin placa de video la separación va a ser muy lenta. Podés seguir igual.</span>{/if}
       </div>
 
+      {#if openError}<p class="warn" role="alert">{openError}</p>{/if}
       <div class="job col">
         <div class="ttl"><Icon name="chip" /><b>Entorno de separación</b> <span class="muted">≈ 8 GB en disco</span></div>
         <p class="info">Los programas que hacen correr la IA en tu placa de video (PyTorch y las bibliotecas de NVIDIA). Se instala una sola vez; es lo que más pesa.</p>
+        <p class="where"><Icon name="carpeta" size={16} /><span class="path">{pathOf('separationEnvDir')}</span>
+          {#if !inDocker}<button class="ghost" onclick={() => openDir('separationEnvDir')}>Abrir carpeta</button>{/if}</p>
         {#if st?.env.present}<span class="ok">Instalado</span>
         {:else if settings.envPull.state === 'running'}<Progress job={settings.envPull} verb="Instalando" />
         {:else}
@@ -164,8 +174,10 @@
       </div>
 
       <div class="job col">
-        <div class="ttl"><Icon name="onda" /><b>Modelo de separación</b> <span class="muted">≈ 700 MB en disco · ≈ 8 GB de placa de video al separar</span></div>
+        <div class="ttl"><Icon name="onda" /><b>Modelo de separación</b> <span class="muted">≈ 700 MB en disco · ≈ 3 GB de placa de video al separar</span></div>
         <p class="info">La red neuronal que separa un tema en guitarra, bajo, batería, piano, voz y otros. Es un solo archivo; necesita el entorno.</p>
+        <p class="where"><Icon name="carpeta" size={16} /><span class="path">{pathOf('separationModelsDir')}</span>
+          {#if !inDocker}<button class="ghost" onclick={() => openDir('separationModelsDir')}>Abrir carpeta</button>{/if}</p>
         {#if st?.separation[0]?.present}<span class="ok">Descargado</span>
         {:else if settings.sepPull.state === 'running'}<Progress job={settings.sepPull} />
         {:else}
@@ -179,11 +191,14 @@
         {#if chat?.installed?.length}
           <div class="ttl"><Icon name="estrella" /><b>Modelo de recomendaciones</b> <span class="muted">{chat.installed[0]}</span></div>
           <p class="info">El modelo de lenguaje que propone discos según tus gustos. Corre en tu equipo.</p>
+          <p class="where"><Icon name="carpeta" size={16} /><span class="path">{pathOf('ollamaModelsDir')}</span>
+            {#if !inDocker}<button class="ghost" onclick={() => openDir('ollamaModelsDir')}>Abrir carpeta</button>{/if}</p>
           <span class="ok">Instalado</span>
         {:else}
           <div class="ttl"><Icon name="estrella" /><b>Modelo de recomendaciones</b>
             {#if candidate}<span class="muted">{candidate.label} · {candidate.gb ? `≈ ${candidate.gb} GB en disco · ≈ ${Math.ceil(candidate.gb + 2)} GB de placa de video` : ''}</span> <span class="reco">Recomendado</span>{/if}</div>
           <p class="info">El modelo de lenguaje que propone discos según tus gustos. Corre en tu equipo y tiene que entrar en la memoria de tu placa de video.</p>
+          <p class="where"><Icon name="carpeta" size={16} /><span class="path">{pathOf('ollamaModelsDir')}</span></p>
           {#if candidate}
             {#if settings.pulls[candidate.id]?.state === 'running'}<Progress job={settings.pulls[candidate.id]} />
             {:else}
@@ -317,6 +332,9 @@
   .feat span { color: var(--muted); font-size: 0.92rem; }
   .ttl { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; }
   .ttl :global(svg) { flex: none; color: #7cc7a3; }
+  .where { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin: 0; color: var(--muted); font-size: 0.88rem; }
+  .where :global(svg) { flex: none; }
+  .where .path { flex: 1; min-width: 0; }
   .info { margin: 0; color: var(--muted); font-size: 0.92rem; line-height: 1.45; }
   .other { width: 100%; }
   .other summary { cursor: pointer; color: var(--muted); font-size: 0.9rem; }

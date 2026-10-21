@@ -24,7 +24,7 @@ CATALOG = [
      "note": "Sin medir. Qwen3 14B salió peor que Mistral Nemo en el cuestionario musical."},
 ]
 VRAM_HEADROOM_GB = 2.0   # activaciones y contexto
-SEPARATION_GB = 8.0      # VRAM que usa la separación con RoFormer (estimada): no coexiste con un modelo grande
+SEPARATION_GB = 3.0      # VRAM de la separación con BS-Roformer-SW: pico medido de 2,7 GiB (clip de 90 s, 2026-10-21) + margen
 
 
 def _gpus():

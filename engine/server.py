@@ -295,6 +295,9 @@ class Handler(BaseHTTPRequestHandler):
                 if not res["ok"]:
                     return self._send(409, {"error": "busy", "message": "Hay trabajo en curso. Esperá a que termine.", "jobs": res["jobs"]})
                 return self._send(200, res)
+            if path == "/engine/open-folder":
+                body = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))) or b"{}")
+                return self._send(200, services.open_folder(str(body.get("key", ""))))
             if path == "/engine/env/install":
                 return self._send(200, envsetup.start())
             if path == "/engine/models/separation/download":
@@ -353,7 +356,7 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(404, {"error": "not_found", "message": "Ruta desconocida"})
         except settings.SettingsError as e:
             return self._send(400, {"error": "settings", "message": str(e)})
-        except (stems.StemsError, analysis.AnalysisError, envsetup.EnvError, ValueError) as e:
+        except (stems.StemsError, analysis.AnalysisError, envsetup.EnvError, services.OpenError, ValueError) as e:
             return self._send(409, {"error": "stems", "message": str(e)})
         except tidal.SourceError as e:
             return self._send(409, {"error": e.code, "message": e.message})

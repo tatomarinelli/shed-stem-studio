@@ -1,5 +1,8 @@
 """Qué está corriendo y en qué puerto, y el apagado ordenado del motor."""
 import os
+import shutil
+import subprocess
+import sys
 import threading
 import time
 from pathlib import Path
@@ -86,4 +89,32 @@ def shutdown():
             httpd.shutdown()
 
     threading.Thread(target=stop, daemon=True).start()
+    return {"ok": True}
+
+
+OPENABLE = ("dataDir", "separationEnvDir", "separationModelsDir", "ollamaModelsDir")
+
+
+class OpenError(Exception):
+    pass
+
+
+def open_folder(key):
+    """Abre una de las carpetas de Ajustes en el explorador de archivos del sistema. Solo claves conocidas: nunca una ruta que mande el cliente."""
+    if in_docker():
+        raise OpenError("Con Docker las carpetas están en tu equipo: abrilas desde el explorador de archivos.")
+    if key not in OPENABLE:
+        raise OpenError("Carpeta desconocida.")
+    path = Path(settings.effective()[key])
+    if not path.is_dir():
+        raise OpenError("La carpeta todavía no existe.")
+    if sys.platform == "win32":
+        os.startfile(str(path))  # noqa: S606 (solo Windows)
+    elif sys.platform == "darwin":
+        subprocess.Popen(["open", str(path)])
+    else:
+        opener = shutil.which("xdg-open")
+        if not opener or not (os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY")):
+            raise OpenError("No hay un explorador de archivos disponible desde el motor.")
+        subprocess.Popen([opener, str(path)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
     return {"ok": True}

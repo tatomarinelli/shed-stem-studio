@@ -30,5 +30,34 @@ class Services(unittest.TestCase):
         self.assertIn("present", envsetup.status())
 
 
+class OpenFolder(unittest.TestCase):
+    def setUp(self):
+        import tempfile
+        from unittest import mock
+
+        self.tmp = tempfile.mkdtemp()
+        self.mock = mock
+        self.eff = mock.patch.object(services.settings, "effective", return_value={"dataDir": self.tmp, "separationEnvDir": self.tmp + "/no-existe"})
+
+    def test_opens_known_folder(self):
+        with self.eff, self.mock.patch.object(services, "in_docker", return_value=False), \
+                self.mock.patch.object(services.sys, "platform", "linux"), self.mock.patch.dict(services.os.environ, {"DISPLAY": ":0"}), \
+                self.mock.patch.object(services.shutil, "which", return_value="/usr/bin/xdg-open"), \
+                self.mock.patch.object(services.subprocess, "Popen") as popen:
+            self.assertEqual(services.open_folder("dataDir"), {"ok": True})
+            self.assertEqual(popen.call_args[0][0], ["/usr/bin/xdg-open", self.tmp])
+
+    def test_rejects_unknown_key_missing_folder_and_docker(self):
+        with self.eff, self.mock.patch.object(services, "in_docker", return_value=False):
+            for key in ("../etc", "musicFolders", ""):
+                with self.assertRaises(services.OpenError):
+                    services.open_folder(key)
+            with self.assertRaises(services.OpenError):
+                services.open_folder("separationEnvDir")  # no existe todavía
+        with self.eff, self.mock.patch.object(services, "in_docker", return_value=True):
+            with self.assertRaises(services.OpenError):
+                services.open_folder("dataDir")
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -161,7 +161,7 @@ Regla de oro: **el recomendador propone, el clasificador decide, MusicBrainz ver
 6. **Recomendación** (otra vez, solo si el usuario lo pide): redacta el contexto del disco con el extracto de Wikipedia, validado como hoy.
 
 ### VRAM (16 GB, 1,2 GB en uso ahora)
-- Separación y recomendación (12B) **no caben juntas**: se turnan, como hoy.
+- Separación (pico medido de ≈ 2,7 GiB) y recomendación (12B, ≈ 9 GB con margen) **entran juntas en 16 GB de placa de video** (≈ 12 GB en total); en placas de 12 GB o menos se turnan. El motor sigue evitando generar recomendaciones mientras separa, por prudencia.
 - Clasificación debería ser chica (Laya ~0,4 B, embeddings 0,27 GB, Kev-0.8B/4B): cabe junto a cualquiera de las dos. Kev-9B sería una decisión aparte según lo que quede libre.
 - Orden de carga: la clasificación corre al final de cada ronda de verificación, con el recomendador ya descargado si hace falta; la separación tiene prioridad sobre ambas, como hoy.
 

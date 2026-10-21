@@ -256,7 +256,7 @@
           <p class="path">{host.path}</p>
           <p class="muted">Con Docker esta carpeta se define al levantar: cambiá <code>{host.var}</code> en <code>docker/.env</code> y volvé a levantar.</p>
         {:else}
-          <div class="head"><b>{r.label}</b><button onclick={() => pick(r.key, `Elegí: ${r.label.toLowerCase()}`, eff[r.key])}>Cambiar</button></div>
+          <div class="head"><b>{r.label}</b><span class="btns"><button class="ghost" onclick={() => settings.openFolder(r.key)}>Abrir carpeta</button><button onclick={() => pick(r.key, `Elegí: ${r.label.toLowerCase()}`, eff[r.key])}>Cambiar</button></span></div>
           <p class="path">{eff[r.key]}</p>
           <p class="muted">{r.help}</p>
         {/if}
@@ -318,6 +318,7 @@
   .off { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 10px; }
   .danger { color: #ff8a8a; border-color: color-mix(in srgb, #ff8a8a 45%, transparent); }
   .env { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; }
+  .btns { display: flex; gap: 8px; }
   .custom { display: flex; flex-wrap: wrap; gap: 10px; align-items: end; width: 100%; }
   .custom label { display: grid; gap: 4px; flex: 1; min-width: 220px; color: var(--muted); font-size: 0.85rem; }
   .act { display: grid; gap: 6px; justify-items: end; min-width: 190px; }

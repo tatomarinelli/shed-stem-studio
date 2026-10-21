@@ -69,6 +69,14 @@ class Settings {
     } catch { /* motor apagado: lo informa el estado general */ }
   }
 
+  /** Abre una carpeta de Ajustes en el explorador del sistema. Devuelve el motivo si no se pudo. */
+  async openFolder(key: 'dataDir' | 'separationEnvDir' | 'separationModelsDir' | 'ollamaModelsDir'): Promise<string> {
+    try {
+      const res = await fetch('/engine/open-folder', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key }) });
+      return res.ok ? '' : (await res.json()).message ?? 'No se pudo abrir la carpeta.';
+    } catch { return 'No pude hablar con el motor.'; }
+  }
+
   async shutdown() {
     this.shutdownMessage = '';
     try {
