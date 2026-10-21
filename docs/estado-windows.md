@@ -11,7 +11,19 @@ Actualizado: 2026-10-21, notebook con Windows 11 Pro (build 26200), Ryzen 9 6900
 
 Se arman con `powershell -ExecutionPolicy Bypass -File windows\build\build.ps1`. Sin firma de código: SmartScreen avisa.
 
-**Publicado** el 2026-10-21 como pre-lanzamiento: https://github.com/tatomarinelli/shed-stem-studio/releases/tag/v0.0.1 (tag `v0.0.1` sobre el commit `9029abd`). SHA-256: instalador `5621ac0a…2485`, zip `91208a6d…3b5a`; coinciden con los del servidor. El instalador se subió como `ShedStemStudio_0.0.1_x64-setup.exe` (GitHub cambia los espacios por puntos).
+**Publicado** como pre-lanzamiento (los archivos se suben como `ShedStemStudio_<versión>_x64-setup.exe`, porque GitHub cambia los espacios por puntos):
+
+| Versión | Fecha | Commit | Enlace | SHA-256 (instalador / zip) |
+|---|---|---|---|---|
+| 0.0.2 | 2026-10-21 | `9ed1ab3` | https://github.com/tatomarinelli/shed-stem-studio/releases/tag/v0.0.2 | `6cc6d911…55bf` / `e2c260fe…46db` |
+| 0.0.1 | 2026-10-21 | `9029abd` | https://github.com/tatomarinelli/shed-stem-studio/releases/tag/v0.0.1 | `5621ac0a…2485` / `91208a6d…3b5a` |
+
+Los hashes coinciden con los que calcula el servidor. **Usar la 0.0.2**: la 0.0.1 no reproduce audio de TIDAL en una PC recién instalada.
+
+### Lo que apareció al probar la 0.0.1 en una PC limpia (corregido en la 0.0.2)
+
+- **Audio sin reproducción, 502 `URLError`**: Python en Windows solo confía en el almacén de certificados del sistema, y una PC recién instalada todavía no tiene las raíces de la CDN de TIDAL. El inicio de sesión andaba porque `requests` trae `certifi`. Simulado con el almacén vacío (el error es idéntico al reportado): falla sin el arreglo y valida con `SSL_CERT_FILE` apuntando a `certifi`. **No confirmado todavía en una PC limpia real con la 0.0.2.**
+- **El enlace de TIDAL no se abría**: dentro de WebView2 los `target="_blank"` no abren nada. La cáscara ahora manda los enlaces externos al navegador del sistema (verificado en su registro `shell.log`) y la interfaz muestra el enlace debajo del botón con un botón para copiarlo.
 El `runtime/` trae Python 3.13.12 embebido, el motor, la interfaz compilada, `tzdata`, `tidalapi` y `uv` 0.13.4 (hash verificado contra el `.sha256` del release). No trae el entorno de separación, ni modelos, ni ffmpeg, ni Ollama: se instalan desde el asistente con un clic.
 
 ## Verificado (con datos)
@@ -28,7 +40,7 @@ El `runtime/` trae Python 3.13.12 embebido, el motor, la interfaz compilada, `tz
 
 ## No verificado
 
-- **TIDAL en Windows**: el inicio de sesión no se probó (la librería ya está en el runtime).
+- **TIDAL en Windows**: el inicio de sesión funciona (probado por el usuario en la 0.0.1); la reproducción en una PC limpia con la 0.0.2 está por confirmar. Nunca se probó desde acá con una cuenta real.
 - **Botones de Cancelar y el paso de ffmpeg en pantalla**: el motor está probado, la interfaz compila y pasa `svelte-check`, pero no se vieron renderizados con un trabajo en curso.
 - **Instalar ffmpeg y Ollama con winget desde el asistente**: el código está probado con procesos simulados; no se ejecutó la instalación real (en esta PC ya estaban).
 - **Una PC limpia**: esta notebook tiene ffmpeg y Ollama de winget; el comportamiento sin ellos solo se probó con tests.
