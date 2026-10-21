@@ -134,7 +134,7 @@ def fetch_source(session, track_id, out_wav, tmp):
 
 
 UNITS = {"": 1, "k": 1e3, "K": 1e3, "M": 1e6, "G": 1e9}
-TRANSFER = re.compile(r"(\d+(?:\.\d+)?)([kKMG]?)B?/(\d+(?:\.\d+)?)([kKMG]?)B?\s*\[[^\]]*?(\d+(?:\.\d+)?)\s?([kKMG]?)B/s\]")
+TRANSFER = re.compile(r"(\d+(?:\.\d+)?)([kKMG]?)i?B?/(\d+(?:\.\d+)?)([kKMG]?)i?B?\s*\[[^\]]*?(\d+(?:\.\d+)?)\s?([kKMG]?)i?B/s\]")
 
 
 def parse_transfer(line):

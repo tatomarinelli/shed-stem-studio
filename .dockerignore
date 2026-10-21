@@ -6,3 +6,4 @@ engine/eval
 docs
 .git
 data
+**/dist

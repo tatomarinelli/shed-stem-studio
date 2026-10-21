@@ -71,3 +71,11 @@ Orden sugerido: AppImage en Linux (la máquina de desarrollo) → Docker para qu
 - Sin verificar: servidor de modelos en Docker (perfil `llm`, no se bajó la imagen de Ollama de 3,4 GB), recomendaciones dentro del contenedor, conexión a TIDAL desde el contenedor, la web publicada en otro dominio.
 - Incidente: el disco raíz (btrfs) se quedó sin espacio asignado (1 MiB sin asignar) y Docker no podía crear contenedores; se resolvió con `btrfs balance` por pasos. Sigue casi lleno (14 GB libres): conviene liberar espacio.
 - Cambios del motor: sirve los stems él mismo (`/engine/tracks`, `/engine/files/...`) en vez del plugin de Vite; `STEMSHED_HOST` y `STEMSHED_ORIGINS`; instalación del entorno y descarga de modelos solo por clic; `/engine/services` y `/engine/shutdown`.
+
+## Recorrido completo desde cero en Docker (2026-10-21)
+
+Instancia nueva (carpetas vacías, otros puertos), con `docker compose up`: motor, Ollama e interfaz.
+- **Hecho de verdad:** instalación del entorno de separación (7,6 GB, ≈ 4,4 GB descargados), descarga del modelo de separación (699 MB, ≈ 50 s) y de Mistral Nemo (≈ 7 GB), separación de un tema de prueba en la GPU del contenedor (6 stems), análisis (tonalidad, tempo y acorde correctos para la señal sintética), carga en el Estudio y un "Disco de hoy" generado por el modelo dentro del contenedor (8 propuestos, 4 verificados en MusicBrainz, 104 s).
+- **Errores encontrados y corregidos:** el chip de descargas del menú se estiraba a toda la altura; sin TIDAL el motor se negaba a recomendar aunque el perfil estuviera completo (ahora usa el perfil y la memoria); la velocidad y los bytes de la descarga del modelo de separación no se leían (formato de tqdm); `Dockerfile.web` dependía de haber corrido `npm run build` en el equipo (ahora se construye dentro de la imagen).
+- **Sin verificar:** conectar TIDAL en Docker; los bytes y la velocidad de la descarga del modelo de separación tras la corrección (el archivo ya estaba bajado); el contexto de Wikipedia (el contenedor recibió 429 de Wikipedia por exceso de consultas desde la misma IP; el disco se mostró con la línea de MusicBrainz).
+- **Comportamiento a tener en cuenta:** reiniciar el motor corta una descarga en curso (la de Ollama se retoma sola desde lo ya bajado al volver a tocar Descargar).

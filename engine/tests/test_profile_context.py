@@ -119,6 +119,17 @@ class OwnArtists(unittest.TestCase):
             self.assertFalse(ok)
             self.assertEqual(cat, "excluded")
 
+class NoTidal(unittest.TestCase):
+    def test_load_sources_without_tidal_is_empty_not_an_error(self):
+        import recs
+        import tidal_source
+
+        err = tidal_source.SourceError("no_session", "Todavía no conectaste TIDAL.")
+        with mock.patch.object(recs, "read_sources", side_effect=err), mock.patch.object(recs, "cached_sources", return_value=[]):
+            self.assertEqual(recs.load_sources(), [])
+        with mock.patch.object(recs, "read_sources", side_effect=err), mock.patch.object(recs, "cached_sources", return_value=[{"kind": "artist", "artist": "X"}]):
+            self.assertEqual(len(recs.load_sources()), 1)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -221,6 +221,14 @@ def suggested_profile(refresh=False):
             "from": "tidal"}
 
 
+def load_sources():
+    """Favoritos de TIDAL si hay sesión; si no, los de la última lectura. Sin TIDAL queda vacío: se usan el perfil y la memoria."""
+    try:
+        return read_sources()
+    except tidal_source.SourceError:
+        return cached_sources()
+
+
 def cached_sources():
     return _read_json(SOURCES, {}).get("items", [])
 
@@ -635,12 +643,7 @@ def run(model, kind="daily", request=None, prof=None, now=None, sources=None, sa
     now = now or time.time()
     _state.update(step="profile")
     if sources is None:
-        try:
-            sources = read_sources()
-        except tidal_source.SourceError:
-            sources = cached_sources()
-            if not sources:
-                raise
+        sources = load_sources()
     snap = snapshot(now, sources, prof)
     if not snap["weights"]["artists"] and not snap["weights"]["genres"] and not profile_mod.filled(snap["profile"]):
         raise ValueError("Todavía no hay gustos para armar un perfil: marcá favoritos en tus fuentes o completá Mi perfil.")
@@ -908,7 +911,7 @@ def _tick(now):
     if any(j.get("state") == "running" for j in stems._jobs.values()):  # el modelo y la separación no entran juntos en la GPU
         return "separating"
     try:
-        if not tidal_source.status().get("connected") and not cached_sources():
+        if not tidal_source.status().get("connected") and not cached_sources() and not profile_mod.filled(load_profile()):
             return "no_source"
         start("daily")
     except Exception:
