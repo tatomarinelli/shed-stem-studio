@@ -7,6 +7,7 @@
   import { nav } from '../lib/nav.svelte';
   import Progress from '../components/Progress.svelte';
   import Icon from '../components/Icon.svelte';
+  import TidalLogin from '../components/TidalLogin.svelte';
   import FolderPicker from '../components/FolderPicker.svelte';
   import ProfileForm from '../components/recs/ProfileForm.svelte';
   import PresetWizard from '../components/recs/PresetWizard.svelte';
@@ -238,9 +239,7 @@
       <div class="job col">
         <div class="head"><span class="ttl"><Icon name="enlaces" /><b>TIDAL</b></span><span class={tidal.state === 'ready' ? 'ok' : 'muted'}>{tidal.label}</span></div>
         {#if tidal.state === 'logging_in'}
-          <p>Abrí el enlace y autorizá con este código:</p>
-          <p class="code num">{tidal.loginCode}</p>
-          <div class="row"><a class="btn" href={tidal.loginUrl} target="_blank" rel="noopener noreferrer">Abrir TIDAL</a><button onclick={() => tidal.cancelLogin()}>Cancelar</button></div>
+          <TidalLogin />
         {:else if tidal.state === 'ready'}<span class="muted">Conectado. Tus favoritos ya se pueden usar para armar tu perfil.</span>
         {:else if tidal.state === 'connecting'}<span class="muted">Conectando…</span>
         {:else}
@@ -344,7 +343,6 @@
   .field, .job { display: grid; gap: 6px; padding: 12px 14px; border-radius: 12px; background: rgba(255,255,255,0.04); justify-items: start; }
   .job .head, .folder { display: flex; justify-content: space-between; align-items: center; gap: 12px; width: 100%; }
   .path { font-family: ui-monospace, monospace; font-size: 0.88em; overflow-wrap: anywhere; margin: 0; }
-  .code { font-size: 34px; font-weight: 700; letter-spacing: 0.12em; margin: 0; }
   .row { display: flex; gap: 10px; flex-wrap: wrap; }
   .btn { display: inline-block; padding: 7px 13px; border-radius: 9px; border: 1px solid var(--glass-line); background: rgba(255,255,255,0.06); text-decoration: none; color: inherit; }
   .ok { color: #7cc7a3; } .warn { color: #f0a43c; }
