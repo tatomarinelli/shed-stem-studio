@@ -1,5 +1,6 @@
 // Fachada de reproducción: sabe qué está sonando ('estudio' = los stems del DAW, 'player' = escucha normal
 // con cola) y deja manejarlo igual desde cualquier pantalla. También guarda el volumen general.
+import { untrack } from 'svelte';
 import { player } from './player.svelte';
 import { preview } from './preview.svelte';
 import { separation } from './separation.svelte';
@@ -158,8 +159,9 @@ class Playback {
       $effect(() => { ms.playbackState = this.mode === 'idle' ? 'none' : this.playing ? 'playing' : 'paused'; });
       $effect(() => {
         const d = this.duration, m = this.mode;
-        // En el Estudio no se lee la posición (cambia en cada cuadro): el navegador la extrapola con la velocidad.
-        const p = m === 'player' ? this.position : 0;
+        // En el Estudio la posición no se sigue (cambia en cada cuadro): se ancla al pausar o reanudar y el navegador extrapola con la velocidad.
+        this.playing; // al pausar o reanudar se vuelve a anclar la posición
+        const p = m === 'player' ? this.position : untrack(() => player.position);
         if (m === 'idle' || !(d > 0)) return;
         try { ms.setPositionState({ duration: d, position: Math.min(p, d), playbackRate: m === 'estudio' ? player.speed : 1 }); } catch { /* valores fuera de rango */ }
       });

@@ -42,6 +42,7 @@ class Preview {
     a.src = `/engine/play/${id}`;
     try { await a.play(); } catch (e) {
       if (this.id !== id || (e as DOMException).name === 'AbortError') return; // lo pisó otro tema
+      if ((e as DOMException).name === 'NotAllowedError') { this.state = 'paused'; return; } // el navegador pide un gesto: queda en pausa
       this.#fail();
     }
   }
@@ -51,7 +52,7 @@ class Preview {
     const a = this.#audio;
     if (!a || !this.id) return;
     if (this.duration && a.currentTime >= this.duration - 0.1) a.currentTime = 0;
-    try { await a.play(); } catch (e) { if ((e as DOMException).name !== 'AbortError') this.#fail(); }
+    try { await a.play(); } catch (e) { const n = (e as DOMException).name; if (n !== 'AbortError' && n !== 'NotAllowedError') this.#fail(); }
   }
   seek(sec: number) { if (this.#audio) this.#audio.currentTime = this.position = Math.max(0, sec); }
   setVolume(g: number) { this.volume = g; if (this.#audio) this.#audio.volume = g; }

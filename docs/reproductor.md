@@ -29,7 +29,7 @@ La barra fija de abajo es un solo componente (`components/Transport.svelte`) con
 
 - Detalle del álbum en Música y `AlbumCard`: ▶ en una fila = desde ese tema hasta el final del álbum. "Escuchar el álbum" (encabezado del detalle) empieza por el primero.
 - Lista "Temas": el tema suena solo.
-- Las filas de temas ya separados siguen abriéndose en el Estudio (su botón ▶ es "Reproducir en el Estudio"); dentro de una cola suenan normal.
+- En una fila ya separada, dentro de un álbum ▶ escucha (arma la cola) y queda el botón "Abrir en el Estudio"; en un tema suelto de la lista Temas ▶ sigue siendo "Reproducir en el Estudio".
 
 ## Atajos
 
@@ -43,10 +43,11 @@ Con `proto/tools/uicheck.py` (Chromium sin ventana, ahora con `--size` y espera 
 - Avance automático al terminar un tema (seek al final) y cierre al terminar el último; "anterior" reinicia pasados 3 s y salta antes.
 - Cola: abrir, resaltado del actual, salto a un índice.
 - Estudio: cargar un tema pasa a la skin Estudio con volumen general (ganancia maestra 0,25 con el fader en 50 %, 0 en silencio); reproducir un tema normal pausa el DAW, y "Abrir en el Estudio" corta la escucha y suena el DAW; Espacio maneja el DAW.
-- Volumen y silencio se recuerdan tras recargar. "Enviar al Estudio" muestra "Bajando / Separando n %" y termina en "Abrir en el Estudio". Un tema sin fuente avisa y salta al siguiente. Sin desborde horizontal a 390 px. 0 errores de consola.
+- Volumen y silencio se recuerdan tras recargar. "Enviar al Estudio" muestra "Bajando / Separando n %" y termina en "Abrir en el Estudio". Un tema sin fuente avisa y salta al siguiente. Sin desborde horizontal a 390 px y el contenido termina por encima de la barra (que publica su alto en `--bar-h`; `main` y los avisos lo usan). Atajos en escucha normal con un tema cargado en el DAW: Espacio alterna, `M`, `K` y `N` no hacen nada, Espacio en el buscador no pausa. 0 errores de consola.
 
 ## Qué no se verificó
 
+- `uicheck.py` abre Chromium con `--autoplay-policy=no-user-gesture-required`: el avance automático se probó con la política de autoplay apagada. Si el navegador la bloquea, `preview.play` deja el tema en pausa (NotAllowedError) en vez de saltar.
 - Nada de oído: el reloj de audio de Chromium sin ventana no dice cómo suena. Falta comprobar a oído que el fader del Estudio baja el nivel, que el cabezal y el click siguen alineados mientras se mueve el volumen, y la curva en volúmenes bajos.
 - Teclas de medios reales y la notificación del sistema (solo se comprobó que `navigator.mediaSession` tenga los metadatos y el estado).
 - Temas de TIDAL (los ids y la portada `/engine/albumart` siguen el código existente, pero no se probó con sesión).
@@ -58,4 +59,6 @@ Con `proto/tools/uicheck.py` (Chromium sin ventana, ahora con `--size` y espera 
 - La cola vive en memoria: recargar la página la pierde (el volumen no).
 - Cargar un tema desde la lista del Estudio corta la escucha en curso.
 - Sin reproducción sin cortes entre temas (un `<audio>` que cambia de `src`), sin aleatorio ni repetir.
-- Las filas de temas ya separados no tienen botón de escucha normal.
+- Un tema suelto ya separado (lista Temas) no tiene botón de escucha normal, solo el del Estudio.
+- En modo Estudio la posición de la notificación del sistema se ancla al pausar o reanudar (no sigue cada cuadro).
+- El panel lateral "Sonando" ahora solo se muestra en modo Estudio.

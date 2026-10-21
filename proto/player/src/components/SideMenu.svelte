@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { playback } from '../lib/playback.svelte';
   import { nav, SCREENS, type Screen } from '../lib/nav.svelte';
   import { player } from '../lib/player.svelte';
   import { ui } from '../lib/ui.svelte';
@@ -37,7 +38,7 @@
       {#if !ui.menuCollapsed}<span>{downloads.length === 1 ? `${downloads[0].label} ${downloads[0].percent ?? 0} %` : `${downloads.length} descargas`}</span>{/if}
     </a>
   {/if}
-  {#if player.status === 'ready' && player.track && !ui.menuCollapsed}
+  {#if playback.mode === 'estudio' && player.track && !ui.menuCollapsed}
     <div class="now">
       <span class="muted">Sonando</span>
       <b>{player.track.title}</b>

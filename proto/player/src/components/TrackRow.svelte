@@ -59,12 +59,10 @@
   <span class="muted num dur">{duration}</span>
   {#if compact}
   <div class="acts ic">
-    {#if separated}
+    <!-- Dentro de una cola (álbum) ▶ siempre escucha; un tema suelto ya separado se abre en el Estudio. -->
+    {#if separated && !queue?.length}
       <button class="ib primary" onclick={() => sendToStudio({ title, artist, localId: pid ?? localId }, { play: true })} title="Reproducir en el Estudio" aria-label="Reproducir en el Estudio">
         <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true"><path d="M8 5.5v13a1 1 0 0 0 1.5.86l10.5-6.5a1 1 0 0 0 0-1.72L9.5 4.64A1 1 0 0 0 8 5.5Z"/></svg>
-      </button>
-      <button class="ib" onclick={() => sendToStudio({ title, artist, localId: pid ?? localId })} title="Abrir en el Estudio" aria-label="Abrir en el Estudio">
-        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17L17 7M9 7h8v8"/></svg>
       </button>
     {:else}
       <button class="ib primary" onclick={listen} aria-pressed={going} title={going ? 'Pausar' : 'Escuchar'} aria-label={going ? 'Pausar' : 'Escuchar'}>
@@ -76,11 +74,15 @@
           <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true"><path d="M8 5.5v13a1 1 0 0 0 1.5.86l10.5-6.5a1 1 0 0 0 0-1.72L9.5 4.64A1 1 0 0 0 8 5.5Z"/></svg>
         {/if}
       </button>
-      {#if job?.state === 'running'}
-        <span class="pct num" role="status" title={separation.label(pid!)}>{job.percent ?? 0} %</span>
-      {:else}
-        <button class="ib sep" disabled={separation.busy || resolving} onclick={separate} title={separation.busy ? 'Ya hay una separación en curso' : 'Separar en instrumentos para estudiar'}>Separar</button>
-      {/if}
+    {/if}
+    {#if separated}
+      <button class="ib" onclick={() => sendToStudio({ title, artist, localId: pid ?? localId })} title="Abrir en el Estudio" aria-label="Abrir en el Estudio">
+        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17L17 7M9 7h8v8"/></svg>
+      </button>
+    {:else if job?.state === 'running'}
+      <span class="pct num" role="status" title={separation.label(pid!)}>{job.percent ?? 0} %</span>
+    {:else}
+      <button class="ib sep" disabled={separation.busy || resolving} onclick={separate} title={separation.busy ? 'Ya hay una separación en curso' : 'Separar en instrumentos para estudiar'}>Separar</button>
     {/if}
     {#if ids}
       <button class="ib" onclick={() => { seed.set({ artist, album: album || undefined, title }); nav.go('recomendaciones'); }} title="Recomendar parecidos" aria-label="Recomendar parecidos">

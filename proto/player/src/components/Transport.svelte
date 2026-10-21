@@ -9,13 +9,16 @@
   const still = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
   const inT = { duration: still ? 0 : 220, delay: still ? 0 : 130 };
   const outT = { duration: still ? 0 : 120 };
+  // La barra publica su alto para que el contenido y los avisos no queden detrás.
+  let h = $state(0);
+  $effect(() => { document.documentElement.style.setProperty('--bar-h', playback.mode === 'idle' ? '0px' : `${h}px`); });
 
   const clock = (s: number) => `${Math.floor(s / 60)}:${(s % 60).toFixed(1).padStart(4, '0')}`;
   const presets = [0.25, 0.5, 0.75, 1];
 </script>
 
 {#if playback.mode !== 'idle'}
-<footer>
+<footer bind:clientHeight={h}>
   <div class="skins">
   {#if playback.mode === 'estudio'}
   <div class="skin" in:fade={inT} out:fade={outT}>

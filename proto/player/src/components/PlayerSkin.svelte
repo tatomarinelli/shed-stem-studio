@@ -65,7 +65,7 @@
     {/if}
     <Volume />
     <button class="ib q" class:on={queueOpen} onclick={() => (queueOpen = !queueOpen)} aria-expanded={queueOpen} aria-label="Cola" title="Cola"><Icon name="cola" size={19} /></button>
-    <button class="ib" onclick={() => playback.stop()} aria-label="Cerrar el reproductor" title="Detener y cerrar"><Icon name="cerrar" size={18} /></button>
+    <button class="ib" onclick={() => playback.stop()} aria-label="Cerrar el reproductor" title="Detener y cerrar (vuelve al Estudio si hay un tema cargado)"><Icon name="cerrar" size={18} /></button>
   </div>
 
   {#if job?.state === 'error'}<p class="err full" role="alert">{job.message}</p>{/if}
