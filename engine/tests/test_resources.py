@@ -279,6 +279,21 @@ class Amd(Base):
         self.assertTrue(g[0]["unverified"])  # sin verificar en hardware real
 
 
+    def test_no_amd_fallback_while_nvidia_smi_warms_up(self):
+        dev = Path(self.root, "drm", "card0", "device")
+        dev.mkdir(parents=True)
+        (dev / "gpu_busy_percent").write_text("5\n")
+        fake_proc(self.root)
+        s = self.sampler(smi_path="x", smi_cmd=[sys.executable, "-c", "import time; time.sleep(30)"])
+        s.tick()                                   # nvidia-smi vivo pero mudo: todavía no hay placa que mostrar
+        self.assertEqual(s._last["gpus"], [])
+        s.stream.close()                           # y muerto, sí se prueba AMD
+        s.stream.cmd = None
+        s.smi = None
+        s.tick()
+        self.assertEqual(s._last["gpus"][0]["vendor"], "amd")
+
+
 class FakeK32:
     """kernel32 simulado: llena las estructuras que recibe por referencia."""
     def __init__(self, idle, kernel, user):

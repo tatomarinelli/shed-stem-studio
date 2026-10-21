@@ -499,6 +499,8 @@ class Sampler:
             gpus = self.stream.latest()
             if gpus:
                 return gpus
+            if self.stream.alive():
+                return []  # nvidia-smi está corriendo pero todavía no dio su primera línea: no se cae a AMD
         if sys.platform.startswith("linux"):
             return amd_gpus(self.drm_root)
         return []
