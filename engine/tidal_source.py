@@ -1,0 +1,241 @@
+"""Fuente TIDAL (vía tidalapi, no oficial): login propio y lectura de favoritos y playlists.
+
+Adaptado de tidalrecs/sources.py (código propio del cliente de TIDAL para Linux). El motor hace su propio
+login por código de dispositivo y guarda la sesión en la carpeta de Shed Stem Studio del usuario; no depende del
+cliente de TIDAL ni lee su sesión. Solo lectura sobre TIDAL: nunca escribe en la cuenta.
+"""
+import os
+import threading
+import time
+from pathlib import Path
+
+CONFIG_DIR = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "stemshed"
+TIDAL_SESSION = CONFIG_DIR / "tidal-session.json"
+CACHE_SECONDS = 60
+FAV_TRACKS, FAV_ALBUMS, FAV_ARTISTS, PLAYLISTS, PLAYLIST_TRACKS = 200, 100, 100, 60, 100
+
+
+class SourceError(Exception):
+    def __init__(self, code, message):
+        super().__init__(message)
+        self.code, self.message = code, message
+
+
+_lock = threading.Lock()
+_session = None
+_cache = {}
+_login = {"state": "idle", "message": ""}  # idle | pending | done | expired | error
+
+
+def _get_session():
+    global _session
+    if _session is not None:
+        return _session
+    try:
+        import tidalapi
+    except ImportError:
+        raise SourceError("no_tidalapi", "Falta la librería tidalapi en el Python del motor (pip install tidalapi).")
+    if not TIDAL_SESSION.exists():
+        raise SourceError("no_session", "Todavía no conectaste TIDAL. Tocá Conectar TIDAL para iniciar sesión.")
+    session = tidalapi.Session()
+    if not session.load_session_from_file(TIDAL_SESSION) or not session.check_login():
+        raise SourceError("session_expired", "La sesión de TIDAL venció. Tocá Conectar TIDAL para iniciar sesión de nuevo.")
+    _session = session
+    return session
+
+
+def _cached(key, fn):
+    hit = _cache.get(key)
+    if hit and time.time() - hit[0] < CACHE_SECONDS:
+        return hit[1]
+    value = fn()
+    _cache[key] = (time.time(), value)
+    return value
+
+
+def clear_cache():
+    _cache.clear()
+
+
+def album_by_id(album_id):
+    """Los temas de un disco de TIDAL por su id (sin búsqueda)."""
+    def build():
+        album = _get_session().album(int(album_id))
+        return {"id": str(album.id), "title": album.name, "artist": album.artist.name if album.artist else "",
+                "tracks": [_track(t) for t in album.tracks()]}
+    with _lock:
+        return _cached(f"albumid:{album_id}", build)
+
+
+def album_art(album_id):
+    import urllib.request
+
+    url = _get_session().album(int(album_id)).image(320)
+    with urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": "ShedStemStudio/0.0.1"}), timeout=20) as r:
+        return r.read()
+
+
+def _track(t):
+    artist = getattr(t, "artist", None)
+    album = getattr(t, "album", None)
+    return {"id": str(t.id), "title": t.name, "artist": artist.name if artist else "",
+            "album": album.name if album else "", "duration": getattr(t, "duration", None)}
+
+
+def status():
+    with _lock:
+        try:
+            _get_session()
+            return {"connected": True}
+        except SourceError as e:
+            return {"connected": False, "code": e.code, "message": e.message}
+
+
+def library():
+    def build():
+        session = _get_session()
+        fav = session.user.favorites
+        playlists = []
+        for p in session.user.playlists()[:PLAYLISTS]:
+            creator = getattr(p, "creator", None)
+            playlists.append({"id": str(p.id), "name": p.name, "tracks": getattr(p, "num_tracks", None),
+                              "own": bool(creator and getattr(creator, "id", None) == session.user.id)})
+        return {
+            "tracks": [_track(t) for t in fav.tracks(limit=FAV_TRACKS)],
+            "albums": [{"id": str(a.id), "title": a.name, "artist": a.artist.name if a.artist else "",
+                        "year": getattr(a, "year", None), "tracks": getattr(a, "num_tracks", None)}
+                       for a in fav.albums(limit=FAV_ALBUMS)],
+            "artists": [a.name for a in fav.artists(limit=FAV_ARTISTS)],
+            "playlists": playlists,
+        }
+    with _lock:
+        return _cached("library", build)
+
+
+def playlist_tracks(playlist_id):
+    def build():
+        session = _get_session()
+        return {"tracks": [_track(t) for t in session.playlist(playlist_id).tracks(limit=PLAYLIST_TRACKS)]}
+    with _lock:
+        return _cached("pl:" + playlist_id, build)
+
+
+def login_start():
+    """Inicia el login por código de dispositivo. Devuelve el link y el código que el usuario autoriza en el navegador."""
+    import tidalapi
+
+    with _lock:
+        global _session
+        _session = None
+        session = tidalapi.Session()
+        link, future = session.login_oauth()
+        _login.update(state="pending", message="")
+
+    def wait():
+        try:
+            future.result()
+            if not session.check_login():
+                raise RuntimeError("login incompleto")
+            CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+            os.chmod(CONFIG_DIR, 0o700)
+            session.save_session_to_file(TIDAL_SESSION)
+            os.chmod(TIDAL_SESSION, 0o600)
+            with _lock:
+                _cache.clear()
+                _login.update(state="done", message="")
+        except TimeoutError:
+            _login.update(state="expired", message="El código venció. Pedí uno nuevo.")
+        except Exception as e:
+            _login.update(state="error", message=f"No se pudo iniciar sesión: {type(e).__name__}")
+
+    threading.Thread(target=wait, daemon=True).start()
+    url = link.verification_uri_complete
+    return {"url": url if url.startswith("http") else "https://" + url, "code": link.user_code, "expiresIn": link.expires_in}
+
+
+def login_status():
+    return dict(_login)
+
+
+def logout():
+    global _session
+    with _lock:
+        _session = None
+        _cache.clear()
+        _login.update(state="idle", message="")
+        TIDAL_SESSION.unlink(missing_ok=True)
+
+
+def session():
+    """Sesión cargada para otros módulos del motor (la separación la usa para bajar el audio)."""
+    with _lock:
+        return _get_session()
+
+
+def _norm(text):
+    import re
+    import unicodedata
+
+    t = unicodedata.normalize("NFD", str(text).lower())
+    return re.sub(r"[^a-z0-9]+", " ", "".join(c for c in t if not unicodedata.combining(c))).strip()
+
+
+def album_tracks(artist, album):
+    """Busca un disco en TIDAL por artista y título (coincidencia normalizada) y devuelve sus temas. None si no lo encuentra."""
+    def build():
+        import tidalapi
+
+        session = _get_session()
+        found = session.search(f"{artist} {album}", models=[tidalapi.album.Album], limit=10).get("albums", [])
+        want_t, want_a = _norm(album), _norm(artist)
+        for a in found:
+            a_artist = a.artist.name if getattr(a, "artist", None) else ""
+            if _norm(a.name) == want_t and want_a in _norm(a_artist):
+                return {"album": {"id": str(a.id), "title": a.name, "artist": a_artist, "year": getattr(a, "year", None)},
+                        "tracks": [_track(t) for t in a.tracks()]}
+        return {"album": None, "tracks": []}
+    with _lock:
+        return _cached(f"album:{_norm(artist)}:{_norm(album)}", build)
+
+
+_stream_cache = {}
+
+
+def stream_source(track_id):
+    """URL directa y tipo de contenido para escuchar un tema sin guardarlo. Prefiere lossless; si el stream no es
+    simple (DASH o cifrado) cae a 320 kbps. La URL es de TIDAL (nunca viene del cliente) y vence: se cachea poco."""
+    track_id = str(int(track_id))
+    hit = _stream_cache.get(track_id)
+    if hit and time.time() - hit[0] < 240:
+        return hit[1]
+    import tidalapi
+
+    with _lock:
+        session = _get_session()
+        for quality in (tidalapi.Quality.high_lossless, tidalapi.Quality.low_320k):
+            session.config.quality = quality
+            manifest = session.track(int(track_id)).get_stream().get_stream_manifest()
+            if manifest.is_bts and manifest.encryption_type in (None, "", "NONE"):
+                value = {"url": manifest.get_urls()[0], "mime": manifest.mime_type or "audio/flac"}
+                _stream_cache[track_id] = (time.time(), value)
+                return value
+    raise SourceError("stream", "TIDAL no entregó un stream que se pueda escuchar directamente. Probá separar el tema.")
+
+
+def find_track(artist, title, album=""):
+    """Un tema de TIDAL que coincida con la referencia. None si no hay."""
+    def build():
+        import tidalapi
+
+        session = _get_session()
+        wt, wa, wb = _norm(title), _norm(artist), _norm(album)
+        best = None
+        for t in session.search(f"{artist} {title}", models=[tidalapi.media.Track], limit=10).get("tracks", []):
+            ta = t.artist.name if getattr(t, "artist", None) else ""
+            if _norm(t.name) == wt and wa in _norm(ta):
+                if wb and getattr(t, "album", None) and _norm(t.album.name) == wb:
+                    return _track(t)
+                best = best or _track(t)
+        return best
+    with _lock:
+        return _cached(f"track:{_norm(artist)}:{_norm(title)}:{_norm(album)}", build)

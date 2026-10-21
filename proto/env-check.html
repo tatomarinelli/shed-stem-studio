@@ -1,0 +1,8 @@
+<!doctype html><meta charset="utf-8"><title>env</title><pre id="o">…</pre>
+<script>
+(async()=>{
+ const r={ua:navigator.userAgent,crossOriginIsolated:self.crossOriginIsolated,hasGPU:!!navigator.gpu,cores:navigator.hardwareConcurrency,mem:navigator.deviceMemory};
+ if(navigator.gpu){try{const a=await navigator.gpu.requestAdapter();r.adapter=a?{info:a.info&&{vendor:a.info.vendor,arch:a.info.architecture,desc:a.info.description},features:[...a.features].length,maxBuf:a.limits.maxBufferSize,maxStorage:a.limits.maxStorageBufferBindingSize}:null}catch(e){r.err=String(e)}}
+ document.getElementById('o').textContent=JSON.stringify(r,null,1);document.title='done';fetch('/report',{method:'POST',body:JSON.stringify(r)});
+})();
+</script>

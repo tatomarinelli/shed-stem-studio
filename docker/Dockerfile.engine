@@ -1,0 +1,26 @@
+# Motor de Shed Stem Studio. Imagen chica: sin modelos ni torch. El entorno de separación (varios GB) y los modelos se instalan
+# desde Ajustes, en las carpetas que el usuario elija (volúmenes), nunca solos.
+FROM python:3.14-slim
+
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends ffmpeg libsndfile1 ca-certificates gcc libc6-dev \
+ && rm -rf /var/lib/apt/lists/*
+
+# Dependencia propia del motor (TIDAL): chica, va en la imagen. torch/CUDA/librosa van en el entorno de Ajustes.
+RUN pip install --no-cache-dir tidalapi==0.8.11
+
+COPY engine /app/engine
+WORKDIR /app/engine
+
+ENV STEMS_ENV=/env \
+    STEMSHED_DATA=/data \
+    STEMSHED_SEP_MODELS=/models/separation \
+    XDG_CONFIG_HOME=/config \
+    STEMSHED_HOST=0.0.0.0 \
+    PYTHONUNBUFFERED=1
+
+RUN useradd -u 1000 -m stemshed && mkdir -p /env /data /models/separation /config && chown -R stemshed /env /data /models /config
+USER stemshed
+EXPOSE 8770
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s CMD python -c "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8770/engine/status',timeout=4)"
+CMD ["python", "server.py", "8770"]

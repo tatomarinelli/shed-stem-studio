@@ -1,0 +1,34 @@
+<!doctype html><meta charset="utf-8"><pre id="o">…</pre>
+<script type="module">
+const SR = 44100, DUR = 10;
+const wasmModule = await WebAssembly.compile(await (await fetch('/rubberband.wasm')).arrayBuffer());
+// pista sintética: un impulso cada 0.5 s empezando en 0.5 s
+const beatTimes = []; for (let t = 0.5; t < DUR - 0.5; t += 0.5) beatTimes.push(t);
+const mk = () => { const sab = new SharedArrayBuffer(SR * DUR * 4), a = new Float32Array(sab); for (const t of beatTimes) { const i = Math.round(t * SR); for (let k = 0; k < 4; k++) a[i + k] = 0.9 * (1 - k / 4); } return sab; };
+const L = mk(), R = mk();
+async function render(engine, speed, click) {
+  const outSec = Math.floor((DUR - 1) / speed);
+  const ctx = new OfflineAudioContext(2, SR * outSec, SR);
+  await ctx.audioWorklet.addModule('/worklet.js');
+  const node = new AudioWorkletNode(ctx, 'stem-engine', { numberOfInputs: 0, outputChannelCount: [2], processorOptions: {
+    stems: [{ L, R }], length: SR * DUR, engine, wasmModule, speed, pos: 0, gains: [1], autoplay: true,
+    beats: { frames: new Float64Array(beatTimes.map(t => t * SR)), down: new Uint8Array(beatTimes.map((_, i) => (i % 4 === 0 ? 1 : 0))) },
+    clickOn: click, clickGain: 0.5 } });
+  let ready; const rp = new Promise(r => (ready = r)); node.port.onmessage = e => { if (e.data.type === 'ready') ready(); };
+  node.connect(ctx.destination); await rp;
+  return (await ctx.startRendering()).getChannelData(0);
+}
+// inicios de eventos: primer cuadro que supera el 25 % del máximo local, con separación mínima de 150 ms
+function onsets(x, thr) { const out = []; let last = -1e9; for (let i = 0; i < x.length; i++) if (Math.abs(x[i]) > thr && i - last > SR * 0.15) { out.push(i); last = i; } return out; }
+const res = [];
+const SPEEDS = (new URLSearchParams(location.search).get('speeds') || '1,0.75,0.5').split(',').map(Number);
+for (const engine of ['rb-fast', 'rb-finer', 'st']) for (const speed of SPEEDS) {
+  const off = await render(engine, speed, false), on = await render(engine, speed, true);
+  const diff = new Float32Array(off.length); for (let i = 0; i < off.length; i++) diff[i] = on[i] - off[i];
+  const a = onsets(off, 0.15), b = onsets(diff, 0.08);
+  const n = Math.min(a.length, b.length), d = []; for (let i = 0; i < n; i++) d.push(((b[i] - a[i]) / SR) * 1000);
+  const mean = d.reduce((p, q) => p + q, 0) / (d.length || 1), sd = Math.sqrt(d.reduce((p, q) => p + (q - mean) ** 2, 0) / (d.length || 1));
+  res.push({ engine, speed, impulsos: a.length, clicks: b.length, desfaseMedioMs: +mean.toFixed(1), desvioMs: +sd.toFixed(1), peor: +Math.max(...d.map(Math.abs)).toFixed(1) });
+}
+document.getElementById('o').textContent = JSON.stringify(res, null, 1); document.title = 'done';
+</script>

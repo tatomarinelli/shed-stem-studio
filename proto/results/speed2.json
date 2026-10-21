@@ -1,0 +1,105 @@
+{
+ "env": {
+  "ua": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/154.0.0.0 Safari/537.36",
+  "isolated": true,
+  "cores": 16
+ },
+ "speed": [
+  {
+   "engine": "rb-fast",
+   "speed": 1,
+   "renderMs": 527,
+   "rtf": 113.9,
+   "peak": 0.879,
+   "nonzeroPct": 100
+  },
+  {
+   "engine": "rb-fast",
+   "speed": 0.75,
+   "renderMs": 1338,
+   "rtf": 44.9,
+   "peak": 1.095,
+   "nonzeroPct": 100
+  },
+  {
+   "engine": "rb-fast",
+   "speed": 0.5,
+   "renderMs": 1340,
+   "rtf": 44.8,
+   "peak": 1.06,
+   "nonzeroPct": 100
+  },
+  {
+   "engine": "rb-fast",
+   "speed": 0.25,
+   "renderMs": 1259,
+   "rtf": 47.7,
+   "peak": 1.056,
+   "nonzeroPct": 100
+  },
+  {
+   "engine": "rb-finer",
+   "speed": 1,
+   "renderMs": 4072,
+   "rtf": 14.7,
+   "peak": 0.877,
+   "nonzeroPct": 100
+  },
+  {
+   "engine": "rb-finer",
+   "speed": 0.75,
+   "renderMs": 4485,
+   "rtf": 13.4,
+   "peak": 1.331,
+   "nonzeroPct": 100
+  },
+  {
+   "engine": "rb-finer",
+   "speed": 0.5,
+   "renderMs": 3581,
+   "rtf": 16.8,
+   "peak": 1.353,
+   "nonzeroPct": 100
+  },
+  {
+   "engine": "rb-finer",
+   "speed": 0.25,
+   "renderMs": 2271,
+   "rtf": 26.4,
+   "peak": 1.286,
+   "nonzeroPct": 100
+  },
+  {
+   "engine": "st",
+   "speed": 1,
+   "renderMs": 111,
+   "rtf": 542.4,
+   "peak": 0.879,
+   "nonzeroPct": 100
+  },
+  {
+   "engine": "st",
+   "speed": 0.75,
+   "renderMs": 94,
+   "rtf": 639.6,
+   "peak": 0.879,
+   "nonzeroPct": 100
+  },
+  {
+   "engine": "st",
+   "speed": 0.5,
+   "renderMs": 100,
+   "rtf": 602.5,
+   "peak": 0.878,
+   "nonzeroPct": 100
+  },
+  {
+   "engine": "st",
+   "speed": 0.25,
+   "renderMs": 92,
+   "rtf": 655.1,
+   "peak": 0.878,
+   "nonzeroPct": 100
+  }
+ ]
+}

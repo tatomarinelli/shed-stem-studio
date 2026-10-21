@@ -1,0 +1,54 @@
+@import '@fontsource-variable/bricolage-grotesque/opsz.css';
+
+:root {
+  --bg: #0f1a1d;
+  --panel: #17262a;
+  --panel-hi: #1e3035;
+  --line: #29393e;
+  --text: #e7eeee;
+  --muted: #8ea4a7;
+  --loop: #ff4d8d;
+  --head: #ffffff;
+  --radius: 14px;
+  --glass: rgba(23, 38, 42, 0.55);
+  --glass-line: rgba(255, 255, 255, 0.08);
+  --menu-w: 220px;
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --font: 'Bricolage Grotesque Variable', 'Fira Sans', system-ui, sans-serif;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0;
+  background:
+    radial-gradient(60rem 38rem at 12% -10%, rgba(240, 164, 60, 0.13), transparent 60%),
+    radial-gradient(54rem 40rem at 105% 8%, rgba(79, 163, 217, 0.13), transparent 60%),
+    radial-gradient(50rem 36rem at 50% 115%, rgba(255, 77, 141, 0.10), transparent 60%),
+    var(--bg);
+  background-attachment: fixed; color: var(--text); font: 400 15px/1.45 var(--font); font-optical-sizing: auto; }
+button, select, input { font: inherit; color: inherit; }
+button, select {
+  background: rgba(255, 255, 255, 0.06); border: 1px solid var(--glass-line); border-radius: 9px; padding: 7px 13px; cursor: pointer;
+  transition: border-color 0.15s, background 0.2s, transform 0.12s var(--ease), color 0.2s;
+}
+button:active:not(:disabled) { transform: scale(0.95); }
+button:hover:not(:disabled), select:hover:not(:disabled) { border-color: var(--muted); }
+button:disabled { opacity: 0.35; cursor: default; }
+:focus-visible { outline: 2px solid var(--head); outline-offset: 2px; }
+h1 { margin: 0; font-weight: 700; letter-spacing: -0.02em; }
+.num { font-variant-numeric: tabular-nums; }
+.muted { color: var(--muted); }
+/* Faders: el tramo lleno (--pct) usa el color --fill; el vacío es bien visible sobre el vidrio. */
+input[type='range'] { --fill: var(--text); appearance: none; background: transparent; height: 22px; cursor: pointer; accent-color: var(--text); }
+input[type='range']::-webkit-slider-runnable-track { height: 6px; border-radius: 3px; background: linear-gradient(90deg, var(--fill) var(--pct, 0%), rgba(255, 255, 255, 0.24) var(--pct, 0%)); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1); }
+input[type='range']::-webkit-slider-thumb { appearance: none; width: 16px; height: 16px; margin-top: -5px; border-radius: 50%; background: #fff; border: 2px solid var(--fill); box-shadow: 0 1px 5px rgba(0, 0, 0, 0.65); }
+input[type='range']::-moz-range-track { height: 6px; border-radius: 3px; background: rgba(255, 255, 255, 0.24); }
+input[type='range']::-moz-range-progress { height: 6px; border-radius: 3px; background: var(--fill); }
+input[type='range']::-moz-range-thumb { width: 12px; height: 12px; border-radius: 50%; background: #fff; border: 2px solid var(--fill); box-shadow: 0 1px 5px rgba(0, 0, 0, 0.65); }
+input[type='range']:hover::-webkit-slider-thumb { transform: scale(1.12); }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+
+select option { background: #17262a; color: var(--text); }
+@keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@keyframes shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }

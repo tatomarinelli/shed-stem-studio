@@ -1,0 +1,4 @@
+# Interfaz de Shed Stem Studio servida por nginx (COOP/COEP incluidos). El build (npm run build) se hace antes, en el host.
+FROM nginx:alpine
+COPY docker/nginx.conf /etc/nginx/conf.d/default.conf
+COPY proto/player/dist /usr/share/nginx/html

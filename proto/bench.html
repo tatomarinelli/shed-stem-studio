@@ -1,0 +1,111 @@
+<!doctype html><meta charset="utf-8"><title>bench</title><pre id="o">corriendo…</pre>
+<script type="module">
+import { loadStems, jsMemory } from './stems.js';
+const SR = 44100, out = { env: { ua: navigator.userAgent, isolated: self.crossOriginIsolated, cores: navigator.hardwareConcurrency } };
+const log = s => { document.getElementById('o').textContent += '\n' + s; };
+const params = new URLSearchParams(location.search);
+const which = (params.get('run') || 'load,speed,loop,seek').split(',');
+const tid = params.get('track') || '633713';
+const wasmModule = await WebAssembly.compile(await (await fetch('./node_modules/rubberband-wasm/dist/rubberband.wasm')).arrayBuffer());
+
+async function render({ data, engine, speed = 1, loop = null, seconds = 30, start = 0, schedule = [] }) {
+  const ctx = new OfflineAudioContext(2, SR * seconds, SR);
+  await ctx.audioWorklet.addModule('./player/public/worklet.js');
+  const node = new AudioWorkletNode(ctx, 'stem-engine', {
+    numberOfInputs: 0, outputChannelCount: [2],
+    processorOptions: { stems: data.stems.map(s => ({ L: s.L, R: s.R })), length: data.length, engine, wasmModule, speed, loop, autoplay: true, schedule },
+  });
+  const seeks = [];
+  const ready = new Promise(r => node.port.addEventListener('message', function f(e) { if (e.data.type === 'ready') { r(); } }));
+  node.port.onmessage = e => { if (e.data.type === 'ready') readyRes(); if (e.data.type === 'seeked') seeks.push(e.data.ms); };
+  let readyRes; const rp = new Promise(r => readyRes = r);
+  node.connect(ctx.destination);
+  await rp;
+  if (start) node.port.postMessage({ type: 'seek', frame: start });
+  const t0 = performance.now();
+  const buf = await ctx.startRendering();
+  return { buf, ms: performance.now() - t0, seeks, seconds };
+}
+
+function xcorrLag(a, b, maxLag, dec = 4, center = 0) { // lag (muestras) donde b mejor calza con a, con decimación
+  let best = -1e30, bl = 0;
+  const n = Math.floor(a.length / dec);
+  for (let lag = -maxLag; lag <= maxLag; lag += 1) {
+    let s = 0;
+    for (let i = 0; i < n; i++) { const j = i * dec + center + lag * dec; if (j < 0 || j >= b.length) continue; s += a[i * dec] * b[j]; }
+    if (s > best) { best = s; bl = lag; }
+  }
+  return bl * dec;
+}
+
+const peak = (x) => { let m = 0; for (const v of x) { const a = Math.abs(v); if (a > m) m = a; } return m; };
+
+if (which.includes('load')) {
+  out.load = [];
+  for (const t of ['633713', '209514765', '77611327']) {
+    const before = await jsMemory();
+    const ctx = new OfflineAudioContext(2, 1, SR);
+    const d = await loadStems(t, ctx);
+    const after = await jsMemory();
+    out.load.push({ track: t, secs: +(d.length / SR).toFixed(1), stems: d.stems.length, flacMB: +(d.bytesFlac / 1e6).toFixed(1), loadMs: Math.round(d.loadMs), f32MB: +(d.stems.length * d.length * 8 / 1e6).toFixed(0), memBeforeMB: before.uaMB, memAfterMB: after.uaMB, uaErr: after.uaErr });
+    log('load ' + t + ' ' + JSON.stringify(out.load.at(-1)));
+    d.stems.length = 0;
+  }
+}
+
+if (which.some(w => ['speed', 'loop', 'seek'].includes(w))) {
+  const ctx = new OfflineAudioContext(2, 1, SR);
+  var data = await loadStems(tid, ctx);
+  log('stems ' + tid + ' cargados: ' + data.stems.map(s => s.name));
+}
+
+if (which.includes('speed')) {
+  out.speed = [];
+  for (const engine of ['rb-fast', 'rb-finer', 'st']) for (const speed of [1, 0.75, 0.5, 0.25]) {
+    const r = await render({ data, engine, speed, seconds: 60, start: 30 * SR });
+    const nz = r.buf.getChannelData(0).reduce((c, v) => c + (v !== 0 ? 1 : 0), 0);
+    out.speed.push({ engine, speed, renderMs: Math.round(r.ms), rtf: +(60000 / r.ms).toFixed(1), peak: +peak(r.buf.getChannelData(0)).toFixed(3), nonzeroPct: +(100 * nz / r.buf.length).toFixed(1) });
+    log('speed ' + JSON.stringify(out.speed.at(-1)));
+  }
+}
+
+if (which.includes('loop')) {
+  out.loop = [];
+  const A = 60 * SR, B = 64 * SR, LAPS = 50;
+  for (const engine of ['rb-fast', 'rb-finer', 'st']) for (const speed of [0.75, 0.5]) {
+    const period = (B - A) / speed;
+    const seconds = Math.ceil((LAPS + 1) * period / SR) + 1;
+    const r = await render({ data, engine, speed, loop: { a: A, b: B }, seconds, start: A });
+    const x = r.buf.getChannelData(0);
+    const P = Math.round(period), W = SR; // ventana de 1 s
+    // ventana de referencia: lap 3, tramo de mayor energía dentro de la vuelta
+    const lap3 = Math.round(3 * period); let bestE = -1, off = 0;
+    for (let o = 0; o + W < P; o += SR / 4) { let e = 0; for (let i = 0; i < W; i += 4) e += x[lap3 + o + i] ** 2; if (e > bestE) { bestE = e; off = o; } }
+    const ref = x.subarray(lap3 + off, lap3 + off + W);
+    const lags = [];
+    for (let k = 4; k <= LAPS; k++) {
+      const base = Math.round(k * period) + off - 2205;
+      const seg = x.subarray(base, base + W + 2 * 2205);
+      lags.push(xcorrLag(ref, seg, 551, 4, 2205) / SR * 1000); // ms; 551 pasos de 4 muestras = ±50 ms
+    }
+    out.loop.push({ engine, speed, laps: LAPS, refEnergy: +bestE.toExponential(2), lagMs: lags.map(v => +v.toFixed(2)) });
+    const abs = lags.map(Math.abs);
+    out.loop.at(-1).summary = { maxAbsMs: +Math.max(...abs).toFixed(2), meanAbsMs: +(abs.reduce((a, b) => a + b, 0) / abs.length).toFixed(2), driftMs: +(lags.at(-1) - lags[0]).toFixed(2) };
+    log('loop ' + engine + ' ' + speed + ' ' + JSON.stringify(out.loop.at(-1).summary));
+  }
+}
+
+if (which.includes('seek')) {
+  out.seek = [];
+  for (const engine of ['rb-fast', 'rb-finer', 'st']) for (const speed of [1, 0.5]) {
+    const sched = [2, 4, 6, 8, 10].map((t, i) => ({ t, msg: { type: 'seek', frame: (40 + i * 20) * SR } }));
+    const r = await render({ data, engine, speed, seconds: 12, start: 10 * SR, schedule: sched });
+    out.seek.push({ engine, speed, ms: r.seeks.map(v => +v.toFixed(1)) });
+    log('seek ' + JSON.stringify(out.seek.at(-1)));
+  }
+}
+
+document.title = 'done';
+await fetch('/report/' + (params.get('name') || 'bench'), { method: 'POST', body: JSON.stringify(out, null, 1) });
+log('LISTO');
+</script>

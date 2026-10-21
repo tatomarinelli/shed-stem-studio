@@ -1,0 +1,27 @@
+{
+  "name": "stemshed-player",
+  "private": true,
+  "version": "0.0.1",
+  "type": "module",
+  "scripts": {
+    "engine": "python3 ../../engine/server.py 8770",
+    "worklet": "esbuild src/engine/worklet.js --bundle --format=esm --outfile=public/worklet.js && cp node_modules/rubberband-wasm/dist/rubberband.wasm public/rubberband.wasm",
+    "dev": "npm run worklet && vite",
+    "build": "npm run worklet && vite build",
+    "check": "svelte-check --tsconfig ./tsconfig.json"
+  },
+  "dependencies": {
+    "@fontsource-variable/bricolage-grotesque": "^5.3.0",
+    "rubberband-wasm": "^3.3.0",
+    "soundtouchjs": "^0.3.0"
+  },
+  "devDependencies": {
+    "@sveltejs/vite-plugin-svelte": "^7.3.1",
+    "@types/node": "^26.6.5",
+    "esbuild": "^0.28.2",
+    "svelte": "^5.57.2",
+    "svelte-check": "^4.7.7",
+    "typescript": "^6.0.3",
+    "vite": "^8.3.4"
+  }
+}

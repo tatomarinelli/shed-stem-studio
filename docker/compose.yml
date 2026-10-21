@@ -1,0 +1,57 @@
+# Shed Stem Studio en Docker. Todo queda en tu máquina: los puertos se publican solo en 127.0.0.1.
+# Uso:  cp .env.example .env  (editá las rutas)  y  docker compose -f docker/compose.yml up -d --build
+# `docker compose up` levanta todo: motor, servidor de modelos (Ollama) e interfaz.
+# No se descarga ningún modelo solo: se eligen y se bajan desde Ajustes, a la carpeta que indiques.
+name: stemshed
+
+services:
+  engine:
+    build: { context: .., dockerfile: docker/Dockerfile.engine }
+    user: "${STEMSHED_UID:-1000}:${STEMSHED_GID:-1000}"
+    restart: on-failure   # un apagado desde Ajustes no lo reinicia solo
+    environment:
+      STEMSHED_OLLAMA: http://ollama:11434
+      STEMSHED_DEFAULT_MUSIC: /music
+      STEMSHED_NO_SCHEDULER: ${STEMSHED_NO_SCHEDULER:-}
+      # Dónde están las carpetas en tu equipo (Ajustes las muestra; se cambian en docker/.env y se vuelve a levantar).
+      STEMSHED_HOST_DATA: ${STEMSHED_DATA:-./data/stemshed}
+      STEMSHED_HOST_ENV: ${STEMSHED_ENV:-./data/env}
+      STEMSHED_HOST_SEP_MODELS: ${STEMSHED_SEP_MODELS:-./data/models/separation}
+      STEMSHED_HOST_LLM_MODELS: ${STEMSHED_LLM_MODELS:-./data/models/ollama}
+      STEMSHED_ORIGINS: ${STEMSHED_ORIGINS:-http://127.0.0.1:5173}
+    volumes:
+      - ${STEMSHED_CONFIG:-./data/config}:/config
+      - ${STEMSHED_DATA:-./data/stemshed}:/data
+      - ${STEMSHED_ENV:-./data/env}:/env                 # entorno de separación (se instala desde Ajustes)
+      - ${STEMSHED_SEP_MODELS:-./data/models/separation}:/models/separation
+      - ${STEMSHED_MUSIC:-./data/music}:/music:ro
+    devices:
+      - nvidia.com/gpu=all          # CDI: requiere nvidia-container-toolkit en el host
+    depends_on:
+      ollama: { condition: service_healthy }
+    ports: ["127.0.0.1:${STEMSHED_ENGINE_PORT:-8770}:8770"]
+    # Sin GPU: borrá `devices` (la separación va a CPU, muy lenta).
+
+  ollama:
+    image: ollama/ollama
+    # Imagen de ≈ 3,4 GB comprimida: se baja la primera vez que se levanta todo.
+    restart: on-failure   # un apagado desde Ajustes no lo reinicia solo
+    environment:
+      OLLAMA_HOST: 0.0.0.0:11434
+    volumes:
+      - ${STEMSHED_LLM_MODELS:-./data/models/ollama}:/root/.ollama/models
+    devices:
+      - nvidia.com/gpu=all
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 15s
+      timeout: 10s
+      retries: 8
+      start_period: 20s
+    # Sin `ports`: solo el motor lo alcanza, por la red interna de compose.
+
+  web:
+    build: { context: .., dockerfile: docker/Dockerfile.web }
+    restart: on-failure   # un apagado desde Ajustes no lo reinicia solo
+    depends_on: [engine]
+    ports: ["127.0.0.1:${STEMSHED_WEB_PORT:-5173}:80"]

@@ -1,0 +1,8 @@
+**/node_modules
+**/__pycache__
+proto/player/public/_*
+engine/tests
+engine/eval
+docs
+.git
+data

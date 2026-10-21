@@ -1,0 +1,25 @@
+node_modules/
+dist/
+__pycache__/
+*.pyc
+*.log
+.DS_Store
+
+# Generado por `npm run worklet` (esbuild + copia del wasm)
+proto/player/public/worklet.js
+proto/player/public/rubberband.wasm
+
+# Local de cada uno: rutas, datos, modelos y sesiones nunca van al repo
+docker/.env
+docker/data/
+*.env
+
+# Instancias de prueba (.env.fresh, etc.)
+docker/.env.*
+!docker/.env.example
+
+# Personal de quien desarrolla: no se versiona
+CLAUDE.local.md
+START.md
+docs/recs-baseline.json
+docs/agent-notes/model-eval-raw/
