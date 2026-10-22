@@ -4,6 +4,7 @@ import json
 import os
 import sys
 import tempfile
+import time
 import types
 import unittest
 from pathlib import Path
@@ -204,3 +205,59 @@ class Install(Base):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class Pairing(Base):
+    GOOD_HEADERS = {"Host": "music.youtube.com", "Cookie": "SAPISID=x", "Authorization": "SAPISIDHASH 123_abc", "X-Goog-AuthUser": "0"}
+
+    def test_sin_token_vigente_no_acepta_nada(self):
+        with self.assertRaises(ProviderError) as c:
+            yu.pair_receive("cualquiera", self.GOOD_HEADERS)
+        self.assertEqual(c.exception.code, "pair_invalid")
+        self.assertFalse(yu.connected())
+
+    def test_token_correcto_guarda_la_sesion_y_se_gasta(self):
+        start = yu.pair_start(8771)
+        token = start["url"].split("stemshed=")[1].split("&")[0]
+        self.assertIn("&port=8771", start["url"])
+        self.assertTrue(yu.pairing())
+        yu.pair_receive(token, self.GOOD_HEADERS)
+        self.assertTrue(yu.connected())
+        self.assertFalse(yu.pairing())
+        with self.assertRaises(ProviderError):
+            yu.pair_receive(token, self.GOOD_HEADERS)
+
+    def test_token_incorrecto_no_gasta_el_vigente(self):
+        yu.pair_start(8771)
+        with self.assertRaises(ProviderError):
+            yu.pair_receive("x" * 32, self.GOOD_HEADERS)
+        self.assertTrue(yu.pairing())
+
+    def test_token_vencido(self):
+        yu.pair_start(8771)
+        yu._pair["exp"] = time.time() - 1
+        with self.assertRaises(ProviderError):
+            yu.pair_receive(yu._pair["token"], self.GOOD_HEADERS)
+
+    def test_encabezados_sin_sesion_se_rechazan_y_el_token_sigue(self):
+        token = yu.pair_start(8771)["url"].split("stemshed=")[1].split("&")[0]
+        with self.assertRaises(ProviderError) as c:
+            yu.pair_receive(token, {"Host": "music.youtube.com", "Cookie": "SAPISID=x"})
+        self.assertEqual(c.exception.code, "bad_headers")
+        self.assertTrue(yu.pairing())
+        self.assertFalse(yu.connected())
+
+    def test_forma_invalida(self):
+        token = yu.pair_start(8771)["url"].split("stemshed=")[1].split("&")[0]
+        for bad in (None, [], {}, {"a": 1}, {str(i): "v" for i in range(100)}):
+            with self.assertRaises(ProviderError):
+                yu.pair_receive(token, bad)
+
+    def test_zip_de_la_extension(self):
+        import io
+        import zipfile
+        data = yu.extension_zip()
+        names = zipfile.ZipFile(io.BytesIO(data)).namelist()
+        self.assertTrue({"manifest.json", "background.js", "content.js"} <= set(names))
+        manifest = json.loads(zipfile.ZipFile(io.BytesIO(data)).read("manifest.json"))
+        self.assertEqual(manifest["host_permissions"], ["https://music.youtube.com/*", "http://127.0.0.1/*"])

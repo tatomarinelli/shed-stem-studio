@@ -1,0 +1,11 @@
+{
+  "manifest_version": 3,
+  "name": "Shed Stem Studio: conectar YouTube Music",
+  "version": "0.1.0",
+  "description": "Cuando tocás Conectar en Shed Stem Studio, le pasa a tu app local (127.0.0.1) la sesión de music.youtube.com. No manda nada a ningún otro lado.",
+  "permissions": ["webRequest", "storage"],
+  "host_permissions": ["https://music.youtube.com/*", "http://127.0.0.1/*"],
+  "background": { "service_worker": "background.js", "scripts": ["background.js"] },
+  "content_scripts": [{ "matches": ["https://music.youtube.com/*"], "js": ["content.js"], "run_at": "document_start" }],
+  "browser_specific_settings": { "gecko": { "id": "ytmusic@shedstem.local" } }
+}

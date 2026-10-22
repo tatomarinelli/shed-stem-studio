@@ -73,6 +73,21 @@
           {:else}<button class="primary" onclick={() => (askInstall = true)}>Instalar ytmusicapi…</button>{/if}
           {#if un.install.state === 'error'}<p class="err" role="alert">{un.install.error}</p>{/if}
         {:else}
+          {#if un.extension}
+            <ol class="mini">
+              <li>Una sola vez: <a href="/engine/ytmusic-extension.zip" download>bajá la extensión</a>, descomprimila y cargala en tu navegador (Chrome o Edge: <code>chrome://extensions</code> → Modo de desarrollador → <i>Cargar descomprimida</i>; Firefox: <code>about:debugging</code> → <i>Cargar complemento temporal</i>).</li>
+              <li>Tocá <b>Conectar</b>: se abre YouTube Music con tu sesión y la extensión le pasa la sesión a la app sola. No copiás nada.</li>
+            </ol>
+            <div class="row">
+              {#if waiting}
+                <span class="muted" role="status">Esperando… navegá un segundo por YouTube Music (por ejemplo, entrá a Biblioteca).</span>
+                <button class="ghost" onclick={() => providers.cancelPairYt()}>Cancelar</button>
+              {:else}
+                <button class="primary" disabled={busy} onclick={() => providers.pairYt()}>Conectar con la extensión</button>
+              {/if}
+            </div>
+          {/if}
+          <details class="off-api" open={!un.extension}><summary>{un.extension ? 'Sin extensión: pegar los encabezados a mano' : 'Pegar los encabezados a mano'}</summary>
           <ol class="mini">
             <li>Abrí <a href="https://music.youtube.com" target="_blank" rel="noopener noreferrer">music.youtube.com</a> con tu cuenta y las herramientas del navegador (F12) → pestaña <i>Red</i>.</li>
             <li>Escribí <i>browse</i> en el filtro, tocá cualquier sección de YouTube Music y buscá una petición <i>POST</i> a <code>/youtubei/v1/browse</code>.</li>
@@ -81,6 +96,7 @@
           <textarea bind:value={headers} rows="4" placeholder="Host: music.youtube.com&#10;Cookie: …&#10;Authorization: SAPISIDHASH …" aria-label="Encabezados de la petición" spellcheck="false" autocomplete="off"></textarea>
           <div class="row"><button class="primary" disabled={!headers.trim() || busy} onclick={saveHeaders}>{busy ? 'Probando…' : 'Conectar'}</button>
             <span class="muted small">Se prueba leyendo tu biblioteca y se guarda cifrado. Se hace una sola vez.</span></div>
+          </details>
         {/if}
       </div>
       <details class="off-api"><summary>Alternativa oficial (Google Cloud): solo playlists y “Me gusta”</summary>

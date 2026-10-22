@@ -47,7 +47,8 @@ class YouTubeMusicProvider(providers.Provider):
         out["connected"] = out["configured"] and self.connected()
         out["capabilities"] = {**self.capabilities, "albums": unofficial.connected()}
         out["unofficial"] = {"installed": unofficial.installed(), "connected": unofficial.connected(), "install": unofficial.install_state(),
-                             "protection": unofficial.protection()}
+                             "protection": unofficial.protection(), "pairing": unofficial.pairing(),
+                             "extension": unofficial.EXT_DIR.is_dir()}
         out["official"] = {"configured": super().configured(), "connected": self._official()}
         return out
 

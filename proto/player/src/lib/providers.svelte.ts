@@ -11,7 +11,7 @@ export interface ProviderStatus {
   note: string;
   managedBy?: string;
   /** Solo YouTube Music: la biblioteca completa con ytmusicapi (no oficial) y el estado de la API oficial. */
-  unofficial?: { installed: boolean; connected: boolean; install: { state: string; error?: string }; protection: ProviderStatus['protection'] };
+  unofficial?: { installed: boolean; connected: boolean; install: { state: string; error?: string }; pairing: boolean; extension: boolean; protection: ProviderStatus['protection'] };
   official?: { configured: boolean; connected: boolean };
 }
 
@@ -76,6 +76,25 @@ class Providers {
     } catch (e) { this.messages.ytmusic = e instanceof Error ? e.message : 'Error'; return false; }
     finally { this.busy = ''; }
   }
+
+  /** Abre music.youtube.com con un token de un solo uso: la extensión toma la sesión y se la pasa al motor. */
+  async pairYt() {
+    this.busy = 'ytmusic'; this.messages.ytmusic = '';
+    try {
+      const { url } = await this.#post('ytmusic', 'pair');
+      window.open(url, '_blank', 'noopener,noreferrer');
+      this.waiting = 'ytmusic';
+      const until = Date.now() + 10 * 60_000;
+      window.clearInterval(this.#poll);
+      this.#poll = window.setInterval(async () => {
+        await this.load();
+        if (this.list.find(p => p.id === 'ytmusic')?.unofficial?.connected || Date.now() > until) { this.waiting = ''; window.clearInterval(this.#poll); }
+      }, 2000);
+    } catch (e) { this.messages.ytmusic = e instanceof Error ? e.message : 'Error'; }
+    finally { this.busy = ''; }
+  }
+
+  async cancelPairYt() { this.cancelWait(); try { await this.#post('ytmusic', 'pair/cancel'); } catch { /* el token vence solo */ } }
 
   #pollInstall() {
     window.clearInterval(this.#poll);

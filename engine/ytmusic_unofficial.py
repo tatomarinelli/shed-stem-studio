@@ -9,11 +9,16 @@ biblioteca (con álbum) y playlists. Es opcional, solo lectura y se elige desde 
 - YouTube puede cambiar su interfaz interna y romper la librería hasta que salga una versión nueva: por eso es un complemento
   y la API oficial sigue siendo la base.
 """
+import hmac
+import io
 import json
+import secrets
 import subprocess
 import sys
 import threading
 import time
+import zipfile
+from pathlib import Path
 
 import jobs
 import osenv
@@ -72,6 +77,54 @@ def install():
             jobs.update(_install, state="error", error=f"No se pudo instalar ytmusicapi ({type(e).__name__}).")
 
     threading.Thread(target=work, daemon=True).start()
+
+
+# ------------------------------------------------------------------ emparejar con la extensión del navegador
+# La extensión (engine/ytmusic_extension) ve los encabezados de la petición a music.youtube.com y los manda al motor SOLO
+# si el usuario tocó "Conectar" en Fuentes: ese botón crea un token de un solo uso (10 minutos) que viaja en la dirección que
+# abre. Sin token vigente el motor ignora lo que llegue.
+PAIR_TTL = 600
+EXT_DIR = Path(__file__).resolve().parent / "ytmusic_extension"
+_pair = {}
+
+
+def pair_start(port):
+    with _lock:
+        _pair.update(token=secrets.token_urlsafe(24), exp=time.time() + PAIR_TTL)
+        return {"url": f"https://music.youtube.com/#stemshed={_pair['token']}&port={int(port)}", "expiresIn": PAIR_TTL}
+
+
+def pairing():
+    return bool(_pair.get("token")) and _pair.get("exp", 0) > time.time()
+
+
+def pair_cancel():
+    with _lock:
+        _pair.clear()
+
+
+def pair_receive(token, headers):
+    """La extensión entrega los encabezados (dict nombre -> valor). Un token sirve una vez; un intento fallido no lo gasta."""
+    with _lock:
+        ok = pairing() and isinstance(token, str) and hmac.compare_digest(token, _pair["token"])
+    if not ok:
+        raise ProviderError("pair_invalid", "El emparejamiento venció o no es válido. Tocá Conectar de nuevo en Fuentes.", 403)
+    if not isinstance(headers, dict) or not 0 < len(headers) < 80 or not all(isinstance(k, str) and isinstance(v, str) for k, v in headers.items()):
+        raise ProviderError("bad_headers", "Encabezados inválidos.", 400)
+    save_headers("\n".join(f"{k}: {v}" for k, v in headers.items() if "\n" not in k + v))
+    pair_cancel()
+
+
+def extension_zip():
+    """La extensión empaquetada, lista para cargar en el navegador; None si la carpeta no está."""
+    if not EXT_DIR.is_dir():
+        return None
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+        for f in sorted(EXT_DIR.rglob("*")):
+            if f.is_file():
+                z.write(f, f.relative_to(EXT_DIR).as_posix())
+    return buf.getvalue()
 
 
 # ------------------------------------------------------------------ sesión

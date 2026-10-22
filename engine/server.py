@@ -118,9 +118,14 @@ class Handler(BaseHTTPRequestHandler):
         return False
 
     def _providers_post(self, path):
-        if path in ("/engine/providers/ytmusic/headers", "/engine/providers/ytmusic/headers/clear", "/engine/providers/ytmusic/install"):
+        if path in ("/engine/providers/ytmusic/headers", "/engine/providers/ytmusic/headers/clear", "/engine/providers/ytmusic/install",
+                    "/engine/providers/ytmusic/pair", "/engine/providers/ytmusic/pair/cancel"):
             yt = providers.get("ytmusic")
-            if path.endswith("/install"):
+            if path.endswith("/pair"):
+                return self._send(200, ytmusic_unofficial.pair_start(self._port()))
+            if path.endswith("/pair/cancel"):
+                ytmusic_unofficial.pair_cancel()
+            elif path.endswith("/install"):
                 ytmusic_unofficial.install()
             elif path.endswith("/clear"):
                 ytmusic_unofficial.clear()
@@ -286,6 +291,16 @@ class Handler(BaseHTTPRequestHandler):
                 if not f:
                     return self._send(404, {"error": "not_found", "message": "No existe ese archivo."})
                 return self._play_file(f)
+            if path == "/engine/ytmusic-extension.zip":
+                data = ytmusic_unofficial.extension_zip()
+                if not data:
+                    return self._send(404, {"error": "not_found", "message": "La extensión no está en esta instalación."})
+                self.send_response(200)
+                self.send_header("Content-Type", "application/zip")
+                self.send_header("Content-Disposition", 'attachment; filename="shed-stem-ytmusic-extension.zip"')
+                self.send_header("Content-Length", str(len(data)))
+                self.end_headers()
+                return self.wfile.write(data)
             if path == "/engine/music":
                 q = {k: v[0] for k, v in urllib.parse.parse_qs(url.query).items()}
                 return self._send(200, catalog.query(
@@ -394,7 +409,24 @@ class Handler(BaseHTTPRequestHandler):
             print(f"TIDAL: {path} falló con {error_detail(e)}", file=sys.stderr, flush=True)  # queda en el registro del motor
             return self._send(502, {"error": "tidal_error", "message": f"TIDAL respondió con un error: {error_detail(e)}"})
 
+    def _pair_post(self, path):
+        """La extensión del navegador entrega la sesión de YouTube Music. No usa el origen de la interfaz: viene de
+        chrome-extension:// o moz-extension:// (una página web no puede falsificarlo) y además lleva el token de un solo uso."""
+        origin = self.headers.get("Origin") or ""
+        if not origin.startswith(("chrome-extension://", "moz-extension://")):
+            return self._send(403, {"error": "origin", "message": "Origen no permitido"})
+        try:
+            size = int(self.headers.get("Content-Length", 0))
+            body = json.loads(self.rfile.read(size) or b"{}") if 0 < size <= ytmusic_unofficial.HEADERS_MAX + 512 else {}
+            ytmusic_unofficial.pair_receive(self.headers.get("X-Stemshed-Token", ""), body.get("headers"))
+            catalog.refresh_providers()
+            return self._send(200, {"ok": True})
+        except providers.ProviderError as e:
+            return self._send(e.status if 400 <= e.status < 600 else 409, {"error": e.code, "message": e.message})
+
     def do_POST(self):
+        if self.path.split("?")[0] == "/engine/pair/ytmusic":
+            return self._pair_post("/engine/pair/ytmusic")
         # Acciones con efecto: el origen es obligatorio y debe estar en la lista.
         if self.headers.get("Origin") not in ALLOWED_ORIGINS:
             return self._send(403, {"error": "origin", "message": "Origen no permitido"})
