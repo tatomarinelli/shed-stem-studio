@@ -26,6 +26,7 @@
   const hw = $derived(settings.hardware);
   const st = $derived(settings.storage);
   const eff = $derived(settings.effective);
+  const inUseServer = $derived(settings.detected?.servers.find(s => s.current));
   const base = (label: string) => label.split(':')[0];
   // Un modelo es "recomendado" si está en el catálogo de Shed Stem Studio y entra en este equipo.
   const recommended = (label: string) => hw?.models.some(c => c.fits && c.id === base(label)) ?? false;
@@ -152,12 +153,15 @@
 
   <section class="card">
     <h3>Recomendaciones</h3>
-    <div class="module">
-      <LlmDetect models={ollamaModels} />
+    <div class="block">
+      <h4>Backend</h4>
+      <LlmDetect />
     </div>
-  </section>
-
-{#snippet ollamaModels()}
+    <div class="block">
+      <h4>Modelos</h4>
+      {#if inUseServer && inUseServer.kind !== 'ollama'}
+        <p class="muted">{inUseServer.kind === 'llamacpp' ? 'llama.cpp' : 'Este servidor'} usa el modelo que tiene cargado.</p>
+      {:else}
       <LlmServer />
       <ul class="models">
         {#each st.recommendations.models as m (m.label)}
@@ -201,7 +205,9 @@
           <li><div class="warn">No hay un modelo instalado. {st.recommendations.running ? 'Ninguno del catálogo entra en tu equipo.' : 'El servidor de modelos está apagado.'}</div></li>
         {/if}
       </ul>
-{/snippet}
+      {/if}
+    </div>
+  </section>
 
   <section class="card">
     <h3>Tu equipo</h3>
@@ -280,6 +286,9 @@
 <style>
   h2 { margin: 0; font-size: 28px; letter-spacing: -0.02em; }
   h3 { margin: 0 0 10px; font-size: 19px; letter-spacing: -0.01em; }
+  .block { display: grid; gap: 6px; padding: 10px 12px; border-radius: 12px; background: rgba(255,255,255,0.03); }
+  .block + .block { margin-top: 10px; }
+  .block h4 { margin: 0 0 2px; }
   h4 { margin: 14px 0 6px; font-size: 15px; color: var(--muted); font-weight: 600; }
   .card { background: var(--glass); backdrop-filter: blur(16px) saturate(1.3); border: 1px solid var(--glass-line); border-radius: var(--radius); padding: 16px 18px; box-shadow: 0 20px 50px -24px rgba(0,0,0,0.7); animation: rise 0.45s var(--ease) both; }
   .card p { margin: 4px 0; }

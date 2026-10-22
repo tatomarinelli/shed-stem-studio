@@ -1,10 +1,9 @@
 <script lang="ts">
-  import { onMount, type Snippet } from 'svelte';
+  import { onMount } from 'svelte';
   import { settings, type DetectedServer } from '../lib/settings.svelte';
   import Progress from './Progress.svelte';
   import JobNote from './JobNote.svelte';
 
-  let { models }: { models?: Snippet } = $props();
   onMount(() => { void settings.detectLlm(); });
 
   const det = $derived(settings.detected);
@@ -58,7 +57,6 @@
               </label>
             </div>
           </div>
-          {#if s.current && s.kind === 'ollama' && models}<div class="inner">{@render models()}</div>{/if}
           {#if askUse?.url === s.url}
             <div class="ask" role="group" aria-label="Confirmar">
               <p>Las recomendaciones van a usar {KIND[s.kind]} en {s.url.replace('http://', '')}.
@@ -121,7 +119,6 @@
   .top { display: flex; gap: 10px; align-items: center; justify-content: space-between; }
   ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
   li { display: grid; gap: 6px; padding: 8px 10px; border: 1px solid var(--line, #3a332d); border-radius: 8px; }
-  .inner { border-top: 1px solid var(--line, #3a332d); padding-top: 8px; display: grid; gap: 6px; }
   .row { display: flex; gap: 10px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
   .sw { display: inline-flex; gap: 6px; align-items: center; font-size: 0.85rem; cursor: pointer; }
   .act { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
