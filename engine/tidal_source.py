@@ -13,7 +13,8 @@ from pathlib import Path
 CONFIG_DIR = osenv.config_dir()
 TIDAL_SESSION = CONFIG_DIR / "tidal-session.json"
 CACHE_SECONDS = 60
-FAV_TRACKS, FAV_ALBUMS, FAV_ARTISTS, PLAYLISTS, PLAYLIST_TRACKS = 200, 100, 100, 60, 100
+PAGE = 50          # tamaño de página que TIDAL acepta en todos los listados
+MAX_ITEMS = 20000  # tope de seguridad contra un servidor que repita páginas para siempre
 
 
 class SourceError(Exception):
@@ -74,6 +75,27 @@ def _cached(key, fn):
     return value
 
 
+def paged(fetch, key=lambda x: x.id, page=PAGE, limit=MAX_ITEMS):
+    """Trae un listado completo de a páginas: fetch(limit, offset) -> lista. Corta con una página vacía, o sin
+    ítems nuevos (si el servidor ignora el offset no se repite para siempre). No confía en que la página venga llena:
+    TIDAL puede devolver menos que lo pedido y todavía quedar más."""
+    out, seen, offset = [], set(), 0
+    while len(out) < limit:
+        batch = fetch(page, offset)
+        new = [x for x in batch if key(x) not in seen]
+        if not new:
+            break
+        seen.update(key(x) for x in new)
+        out.extend(new)
+        offset += len(batch)
+    return out
+
+
+def _saved(x):
+    d = getattr(x, "user_date_added", None)
+    return d.isoformat() if d else None
+
+
 def clear_cache():
     _cache.clear()
 
@@ -115,21 +137,37 @@ def status():
             return out
 
 
+def _own_playlists(session):
+    """Las playlists propias, todas (el endpoint tiene tope por página)."""
+    uid = session.user.id
+
+    def fetch(limit, offset):
+        return session.request.map_request(f"users/{uid}/playlists", params={"limit": limit, "offset": offset},
+                                           parse=session.user.playlist.parse_factory)
+    return paged(fetch)
+
+
 def library():
+    """Favoritos completos, del más reciente al más viejo (orden de guardado): se pagina hasta el final, sin tope fijo."""
     def build():
+        from tidalapi.types import AlbumOrder, ArtistOrder, ItemOrder, OrderDirection
         session = _get_session()
         fav = session.user.favorites
+        desc = OrderDirection.Descending
         playlists = []
-        for p in session.user.playlists()[:PLAYLISTS]:
+        for p in _own_playlists(session):
             creator = getattr(p, "creator", None)
             playlists.append({"id": str(p.id), "name": p.name, "tracks": getattr(p, "num_tracks", None),
                               "own": bool(creator and getattr(creator, "id", None) == session.user.id)})
+        albums = paged(lambda n, o: fav.albums(limit=n, offset=o, order=AlbumOrder.DateAdded, order_direction=desc))
+        tracks = paged(lambda n, o: fav.tracks(limit=n, offset=o, order=ItemOrder.Date, order_direction=desc))
+        artists = paged(lambda n, o: fav.artists(limit=n, offset=o, order=ArtistOrder.DateAdded, order_direction=desc))
         return {
-            "tracks": [_track(t) for t in fav.tracks(limit=FAV_TRACKS)],
+            "tracks": [{**_track(t), "savedAt": _saved(t)} for t in tracks],
             "albums": [{"id": str(a.id), "title": a.name, "artist": a.artist.name if a.artist else "",
-                        "year": getattr(a, "year", None), "tracks": getattr(a, "num_tracks", None)}
-                       for a in fav.albums(limit=FAV_ALBUMS)],
-            "artists": [a.name for a in fav.artists(limit=FAV_ARTISTS)],
+                        "year": getattr(a, "year", None), "tracks": getattr(a, "num_tracks", None), "savedAt": _saved(a)}
+                       for a in albums],
+            "artists": [a.name for a in artists],
             "playlists": playlists,
         }
     with _lock:
@@ -138,8 +176,8 @@ def library():
 
 def playlist_tracks(playlist_id):
     def build():
-        session = _get_session()
-        return {"tracks": [_track(t) for t in session.playlist(playlist_id).tracks(limit=PLAYLIST_TRACKS)]}
+        pl = _get_session().playlist(playlist_id)
+        return {"tracks": [_track(t) for t in paged(lambda n, o: pl.tracks(limit=n, offset=o))]}
     with _lock:
         return _cached("pl:" + playlist_id, build)
 

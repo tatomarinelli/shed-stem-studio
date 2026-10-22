@@ -85,13 +85,21 @@ def refresh_tidal():
         try:
             tidal_source.clear_cache()
             lib = tidal_source.library()
-            tracks = {}
+            tracks, skipped = {}, 0
             for t in lib["tracks"]:
                 tracks[t["id"]] = {**t, "collections": ["Favoritos"]}
             for p in lib["playlists"]:
-                for t in tidal_source.playlist_tracks(p["id"])["tracks"]:
+                try:
+                    items = tidal_source.playlist_tracks(p["id"])["tracks"]
+                except tidal_source.SourceError:
+                    raise
+                except Exception:  # una playlist rota (borrada, sin permiso) no debe tirar abajo toda la actualización
+                    skipped += 1
+                    continue
+                for t in items:
                     tracks.setdefault(t["id"], {**t, "collections": []})["collections"].append(p["name"])
-            _tidal.update(albums=lib["albums"], tracks=list(tracks.values()), fetchedAt=time.time())
+            _tidal.update(albums=lib["albums"], tracks=list(tracks.values()), fetchedAt=time.time(),
+                          error=f"No pude leer {skipped} playlist{'s' if skipped != 1 else ''}." if skipped else "")
             _save("tidal.json", {"fetchedAt": _tidal["fetchedAt"], "albums": _tidal["albums"], "tracks": _tidal["tracks"]})
             _bump()
             enrich_genres()
@@ -174,13 +182,14 @@ def _albums_raw():
             a["sources"].append("local")
         a["localIds"].append(t["id"])
         a["genres"] = a["genres"] or _split_genres(t.get("genre"))
-    for t in _tidal["albums"]:
+    for rank, t in enumerate(_tidal["albums"]):  # la lista de TIDAL viene del más recién guardado al más viejo
         k = album_key(t["artist"], t["title"])
         a = albums.setdefault(k, {"key": k, "title": t["title"], "artist": t["artist"], "year": t.get("year"), "genres": [],
                                   "sources": [], "localIds": [], "tidalId": None, "artUrl": f"/engine/albumart/{t['id']}"})
         if "tidal" not in a["sources"]:
             a["sources"].append("tidal")
         a["tidalId"] = t["id"]
+        a["savedAt"], a["rank"] = t.get("savedAt"), rank
         a["year"] = a["year"] or t.get("year")
     for k, a in albums.items():
         a["genres"] = a["genres"] or (_genres.get(k) or {}).get("genres", [])
@@ -195,10 +204,12 @@ def _tracks_raw():
                                   "genres": _split_genres(t.get("genre")), "sources": [], "ids": {}, "collections": []})
         x["sources"].append("local") if "local" not in x["sources"] else None
         x["ids"]["local"] = t["id"]
-    for t in _tidal["tracks"]:
+    for rank, t in enumerate(_tidal["tracks"]):
         k = f"{norm(t['artist'])}|{norm(t['title'])}"
         x = tracks.setdefault(k, {"key": k, "title": t["title"], "artist": t["artist"], "album": t["album"], "duration": t["duration"],
                                   "genres": [], "sources": [], "ids": {}, "collections": []})
+        if "rank" not in x:
+            x["savedAt"], x["rank"] = t.get("savedAt"), rank
         x["sources"].append("tidal") if "tidal" not in x["sources"] else None
         x["ids"]["tidal"] = t["id"]
         for c in t.get("collections", []):
@@ -221,7 +232,21 @@ def snapshot():
     return data
 
 
-def query(kind="albums", q="", source="", artist="", genre="", limit=60, offset=0):
+SORTS = ("saved", "alpha", "artist")
+
+
+def sort_items(hits, sort):
+    """saved: lo último que guardaste en TIDAL primero (después lo que solo está en tus archivos);
+    alpha: por título; artist: por artista y título."""
+    title = lambda i: norm(i["title"])
+    if sort == "alpha":
+        return sorted(hits, key=lambda i: (title(i), norm(i["artist"])))
+    if sort == "artist":
+        return sorted(hits, key=lambda i: (norm(i["artist"]), title(i)))
+    return sorted(hits, key=lambda i: (0, i["rank"], "") if "rank" in i else (1, norm(i["artist"]), title(i)))
+
+
+def query(kind="albums", q="", source="", artist="", genre="", limit=60, offset=0, sort="saved"):
     data = snapshot()
     items = data["albums" if kind == "albums" else "tracks"]
     nq = norm(q)
@@ -238,7 +263,7 @@ def query(kind="albums", q="", source="", artist="", genre="", limit=60, offset=
         return True
 
     hits = [i for i in items if match(i)]
-    hits.sort(key=lambda i: (norm(i["artist"]), norm(i.get("year") or 0 and "" or ""), norm(i["title"])))
+    hits = sort_items(hits, sort if sort in SORTS else "saved")
     # Facetas calculadas sin el filtro propio, para que el selector siga mostrando las demás opciones.
     count = lambda field, ignore: _count([i for i in items if match(i, (ignore,))], field)
     return {"total": len(hits), "items": hits[offset:offset + limit],

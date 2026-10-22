@@ -22,6 +22,7 @@
   let source = $state<'' | 'local' | 'tidal'>('');
   let artist = $state('');
   let genre = $state('');
+  let sort = $state<'saved' | 'alpha' | 'artist'>('saved');
   let query = $state('');
   let debounced = $state('');
   let items = $state<(Album | Track)[]>([]);
@@ -44,7 +45,7 @@
   $effect(() => { const q = query; window.clearTimeout(t); t = window.setTimeout(() => (debounced = q.trim()), 250); return () => window.clearTimeout(t); });
 
   const params = (offset: number) => {
-    const p = new URLSearchParams({ kind, limit: String(LIMIT), offset: String(offset) });
+    const p = new URLSearchParams({ kind, sort, limit: String(LIMIT), offset: String(offset) });
     if (debounced) p.set('q', debounced);
     if (source) p.set('source', source);
     if (artist) p.set('artist', artist);
@@ -72,8 +73,16 @@
   }
 
   // Cualquier cambio de filtro, búsqueda, vista o catálogo vuelve a pedir desde el principio.
-  $effect(() => { kind; source; artist; genre; debounced; music.version; untrack(() => load(true)); });
+  $effect(() => { kind; source; artist; genre; sort; debounced; music.version; untrack(() => load(true)); });
   $effect(() => { untrack(() => { library.load(); }); });
+  // Al entrar, si lo de TIDAL tiene más de 10 minutos, se vuelve a leer solo (un álbum recién guardado aparece sin tocar nada).
+  let autoChecked = false;
+  $effect(() => {
+    const s = music.status;
+    if (autoChecked || !s || !music.sources.tidal) return;
+    autoChecked = true;
+    if (!s.tidal.refreshing && (!s.tidal.fetchedAt || Date.now() / 1000 - s.tidal.fetchedAt > 600)) untrack(() => music.refresh());
+  });
 
   $effect(() => {
     if (!sentinel) return;
@@ -98,7 +107,7 @@
     return i < 0 ? -1 : Math.min(items.length - 1, (Math.floor(i / cols) + 1) * cols - 1);
   });
   // Si cambia la búsqueda o un filtro, el álbum abierto puede ya no estar: se cierra.
-  $effect(() => { kind; source; artist; genre; debounced; untrack(() => (openAlbum = null)); });
+  $effect(() => { kind; source; artist; genre; sort; debounced; untrack(() => (openAlbum = null)); });
 
   const filtered = $derived(!!(debounced || source || artist || genre));
   const noSources = $derived(!loading && !failed && !filtered && facets.sources.local === 0 && facets.sources.tidal === 0 && !music.working);
@@ -152,6 +161,13 @@
     </div>
     <Combo label="Artista" items={facets.artists} bind:value={artist} />
     <Combo label="Género" items={facets.genres} bind:value={genre} />
+    <label class="ord">Orden
+      <select bind:value={sort} aria-label="Orden">
+        <option value="saved">Guardado</option>
+        <option value="alpha">Alfabético</option>
+        <option value="artist">Artista</option>
+      </select>
+    </label>
     <div class="seg view" role="group" aria-label="Vista">
       <button class:on={kind === 'albums'} onclick={() => (kind = 'albums')}>Álbumes</button>
       <button class:on={kind === 'tracks'} onclick={() => (kind = 'tracks')}>Temas</button>
@@ -237,6 +253,8 @@
   .seg button { border: 0; background: transparent; border-radius: 9px; padding: 5px 12px; }
   .seg button.on { background: rgba(255,255,255,0.16); }
   .seg .num { font-size: 12px; color: var(--muted); margin-left: 4px; }
+  .ord { display: flex; align-items: center; gap: 6px; font-size: 13.5px; color: var(--muted); }
+  .ord select { background: rgba(255,255,255,0.06); color: var(--text); border: 1px solid var(--glass-line); border-radius: 9px; padding: 5px 8px; }
   .view { margin-left: auto; }
   .count { font-size: 13.5px; display: flex; gap: 14px; min-height: 20px; }
   .link { background: none; border: 0; padding: 0; color: var(--text); text-decoration: underline; }
