@@ -6,6 +6,7 @@
   import { recs } from '../lib/recs.svelte';
   import { nav } from '../lib/nav.svelte';
   import Progress from '../components/Progress.svelte';
+  import JobNote from '../components/JobNote.svelte';
   import Icon from '../components/Icon.svelte';
   import TidalLogin from '../components/TidalLogin.svelte';
   import FolderPicker from '../components/FolderPicker.svelte';
@@ -13,6 +14,7 @@
   import PresetWizard from '../components/recs/PresetWizard.svelte';
   import BackendPicker from '../components/BackendPicker.svelte';
   import LlmServer from '../components/LlmServer.svelte';
+  import LlmDetect from '../components/LlmDetect.svelte';
   import FfmpegSetup from '../components/FfmpegSetup.svelte';
 
   const hw = $derived(settings.hardware);
@@ -26,7 +28,7 @@
     void recs.load();
     untrack(() => tidal.connect());
     settings.watchServices(true);
-    const t = window.setInterval(() => void settings.syncJobs(['mistral-nemo']), 2500);
+    const t = window.setInterval(() => void settings.syncJobs(), 2500);
     return () => { settings.watchServices(false); window.clearInterval(t); };
   });
 
@@ -178,7 +180,7 @@
           <BackendPicker />
           <button class="primary" disabled={envBlocked} onclick={() => settings.installEnv()}>Instalar</button>
           {#if envBlocked}<span class="warn" role="alert">Necesita unos 10 GB y quedan {envFree} GB acá. Cambiá la carpeta en el paso anterior.</span>{/if}
-          {#if settings.envPull.state === 'error'}<span class="warn" role="alert">{settings.envPull.message}</span>{/if}
+          <JobNote job={settings.envPull} />
         {/if}
       </div>
 
@@ -193,11 +195,12 @@
           <FfmpegSetup />
           <button class="primary" disabled={!st?.env.present || settings.ffmpeg?.installed === false} onclick={() => settings.pullSeparation()}>Descargar</button>
           {#if !st?.env.present}<span class="muted">Primero el entorno.</span>{/if}
-          {#if settings.sepPull.state === 'error'}<span class="warn" role="alert">{settings.sepPull.message}</span>{/if}
+          <JobNote job={settings.sepPull} />
         {/if}
       </div>
 
       <div class="job col">
+        <LlmDetect />
         <LlmServer />
         {#if chat?.installed?.length}
           <div class="ttl"><Icon name="estrella" /><b>Modelo de recomendaciones</b> <span class="muted">{chat.installed[0]}</span></div>
@@ -211,11 +214,12 @@
           <p class="info">Propone discos según tus gustos. Corre en tu equipo.</p>
           <p class="where"><Icon name="carpeta" size={16} /><span class="path">{pathOf('ollamaModelsDir')}</span></p>
           {#if candidate}
-            {#if settings.pulls[candidate.id]?.state === 'running'}<Progress job={settings.pulls[candidate.id]} />
+            {#if settings.pulls[candidate.id]?.state === 'running'}<Progress job={settings.pulls[candidate.id]} oncancel={() => settings.cancelPull(candidate.id)} />
             {:else}
-              <button class="primary" disabled={!candidate.fits} onclick={() => settings.pull(candidate.id)}>Descargar</button>
+              <button class="primary" disabled={!candidate.fits || !!settings.pullingNow} onclick={() => settings.pull(candidate.id)}>Descargar</button>
+              {#if settings.pullingNow}<span class="muted">Esperá a que termine {settings.pullingNow}.</span>{/if}
               {#each candidate.reasons as r (r)}<span class="warn" role="alert">{r}</span>{/each}
-              {#if settings.pulls[candidate.id]?.state === 'error'}<span class="warn" role="alert">{settings.pulls[candidate.id].message}</span>{/if}
+              <JobNote job={settings.pulls[candidate.id]} />
             {/if}
           {/if}
           {#if candidate && hw?.gpus.some(g => g.accel) && !candidate.withSeparation}
@@ -227,8 +231,8 @@
               <label>Nombre en Ollama, por ejemplo qwen3:8b
                 <input bind:value={customModel} placeholder="nombre:etiqueta" autocomplete="off" spellcheck="false" />
               </label>
-              {#if customModel.trim() && settings.pulls[customModel.trim()]?.state === 'running'}<Progress job={settings.pulls[customModel.trim()]} />
-              {:else}<button type="submit" disabled={!customModel.trim()}>Descargar</button>{/if}
+              {#if customModel.trim() && settings.pulls[customModel.trim()]?.state === 'running'}<Progress job={settings.pulls[customModel.trim()]} oncancel={() => settings.cancelPull(customModel.trim())} />
+              {:else}<button type="submit" disabled={!customModel.trim() || !!settings.pullingNow}>Descargar</button>{/if}
             </form>
           </details>
           {#if chat && !chat.serverUp}

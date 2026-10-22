@@ -294,3 +294,8 @@ def pull_cancel(model_id):
 
 def pull_status(model_id):
     return jobs.public(_pulls.get(model_id, {"state": "idle"}))
+
+
+def pulls_status():
+    """Todas las descargas que el motor conoce (en curso o terminadas), para retomarlas tras recargar la página."""
+    return {k: jobs.public(v) for k, v in _pulls.items()}

@@ -293,6 +293,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(200, llmdetect.detect(force=True))
             if path == "/engine/backends":
                 return self._send(200, backends.report(hardware._gpus()))
+            if path == "/engine/models/pulls":
+                return self._send(200, models.pulls_status())
             if path == "/engine/models/separation/status":
                 return self._send(200, stems.sep_download_status())
             m = re.fullmatch(r"/engine/models/([A-Za-z0-9._:/-]{1,100})/status", urllib.parse.unquote(path))

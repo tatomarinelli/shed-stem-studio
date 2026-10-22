@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { settings } from '../lib/settings.svelte';
   import Progress from './Progress.svelte';
+  import JobNote from './JobNote.svelte';
 
   onMount(() => { void settings.loadFfmpeg(); });
 
@@ -11,11 +12,11 @@
 {#if ff && !ff.installed}
   <div class="ff">
     <b>ffmpeg</b>
-    {#if ff.job.state === 'running'}<Progress job={ff.job} verb="Instalando" />
+    {#if ff.job.state === 'running'}<Progress job={ff.job} verb="Instalando" oncancel={() => settings.cancelFfmpeg()} />
     {:else if ff.canInstall}
       <span class="muted">Hace falta para separar</span>
       <button class="primary" onclick={() => settings.installFfmpeg()}>Instalar</button>
-      {#if ff.job.state === 'error'}<span class="warn" role="alert">{ff.job.message}</span>{/if}
+      <JobNote job={ff.job} />
     {:else}<span class="warn">Falta instalarlo (ffmpeg.org)</span>{/if}
   </div>
 {/if}
