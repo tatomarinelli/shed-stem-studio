@@ -8,9 +8,10 @@
   import { resolveId } from '../lib/resolve';
   import { seed } from '../lib/seed.svelte';
   import { nav } from '../lib/nav.svelte';
+  import OpenIn from './OpenIn.svelte';
 
-  let { title, artist, meta = '', duration = '', localId, origin = false, badge = '', sourceId, resolve = false, album = '', ids, art, compact = false, n = 0, queue, qi = 0 }:
-    { compact?: boolean; n?: number; queue?: QItem[]; qi?: number; title: string; artist: string; meta?: string; duration?: string; localId?: string; origin?: boolean; badge?: string; sourceId?: string; resolve?: boolean; album?: string; ids?: { local?: string; tidal?: string }; art?: string } = $props();
+  let { title, artist, meta = '', duration = '', localId, origin = false, badge = '', sourceId, resolve = false, album = '', ids, art, links, compact = false, n = 0, queue, qi = 0 }:
+    { compact?: boolean; n?: number; queue?: QItem[]; qi?: number; title: string; artist: string; meta?: string; duration?: string; localId?: string; origin?: boolean; badge?: string; sourceId?: string; resolve?: boolean; album?: string; ids?: { local?: string; tidal?: string }; art?: string; links?: Record<string, string> } = $props();
 
   // Un tema "referencia" (de favoritos, playlists...) no trae su audio: se busca con el orden de fuentes de Ajustes.
   let resolved = $state<string | null>(null);
@@ -90,6 +91,7 @@
         <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l2 5.5 5.5 2-5.5 2L12 18l-2-5.5L4.5 10.5l5.5-2zM19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/></svg>
       </button>
     {/if}
+    <OpenIn {links} size={14} />
     {#if job?.state === 'error'}<span class="err" role="alert" title={job.message}>!</span>{/if}
   </div>
   {:else}

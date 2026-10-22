@@ -41,6 +41,15 @@ def resume_enrichment():
     _pause.clear()
 
 
+LINK_HOSTS = ("open.spotify.com", "music.youtube.com", "tidal.com")
+
+
+def _link(url):
+    """Enlace a la fuente original: solo https y solo los sitios de los servicios (el dato viene de la red)."""
+    p = urllib.parse.urlparse(str(url or ""))
+    return str(url) if p.scheme == "https" and p.hostname in LINK_HOSTS and len(str(url)) < 400 else None
+
+
 def norm(text):
     t = unicodedata.normalize("NFD", str(text).lower())
     return re.sub(r"[^a-z0-9]+", " ", "".join(c for c in t if not unicodedata.combining(c))).strip()
@@ -263,6 +272,7 @@ def _albums_raw():
         if "tidal" not in a["sources"]:
             a["sources"].append("tidal")
         a["tidalId"] = t["id"]
+        a.setdefault("links", {})["tidal"] = f"https://tidal.com/browse/album/{t['id']}"
         a["savedAt"], a["rank"] = t.get("savedAt"), rank
         a["year"] = a["year"] or t.get("year")
     for pid in EXT_IDS:
@@ -273,6 +283,8 @@ def _albums_raw():
             if pid not in a["sources"]:
                 a["sources"].append(pid)
             a.setdefault("extIds", {})[pid] = t["id"]
+            if _link(t.get("url")):
+                a.setdefault("links", {})[pid] = t["url"]
             if not a.get("artUrl") and extart.url_for(t.get("thumb")):
                 a["artUrl"] = extart.url_for(t["thumb"])
             if t.get("addedAt") and not a.get("savedAt"):
@@ -300,6 +312,7 @@ def _tracks_raw():
             x["savedAt"], x["rank"] = t.get("savedAt"), rank
         x["sources"].append("tidal") if "tidal" not in x["sources"] else None
         x["ids"]["tidal"] = t["id"]
+        x.setdefault("links", {})["tidal"] = f"https://tidal.com/browse/track/{t['id']}"
         for c in t.get("collections", []):
             if c not in x["collections"]:
                 x["collections"].append(c)
@@ -313,6 +326,8 @@ def _tracks_raw():
             if pid not in x["sources"]:
                 x["sources"].append(pid)
             x.setdefault("refs", {})[pid] = t["id"]  # referencia a la cuenta: no es audio, no va en `ids`
+            if _link(t.get("url")):
+                x.setdefault("links", {})[pid] = t["url"]
     for x in tracks.values():
         x["genres"] = x["genres"] or (_genres.get(album_key(x["artist"], x["album"])) or {}).get("genres", [])
         base = x["ids"].get("local") or x["ids"].get("tidal")
@@ -436,6 +451,7 @@ def album_detail(key):
             for i, t in enumerate(tidal_source.album_by_id(a["tidalId"])["tracks"]):
                 x = tracks.setdefault(norm(t["title"]), {"title": t["title"], "artist": t["artist"], "album": a["title"], "duration": t["duration"], "ids": {}, "order": f"{i:03d}"})
                 x["ids"]["tidal"] = t["id"]
+                x.setdefault("links", {})["tidal"] = f"https://tidal.com/browse/track/{t['id']}"
         except Exception:
             pass
     if not a["tidalId"]:  # sin TIDAL: se pide el disco a la cuenta que lo tiene (Spotify / YouTube Music)
@@ -443,12 +459,17 @@ def album_detail(key):
             for i, t in enumerate(_ext_album_tracks(pid, album_id) or []):
                 x = tracks.setdefault(norm(t["title"]), {"title": t["title"], "artist": t["artist"], "album": a["title"], "duration": t.get("duration"), "ids": {}, "order": f"~{i:03d}"})
                 x.setdefault("refs", {})[pid] = t["id"]
+                if _link(t.get("url")):
+                    x.setdefault("links", {})[pid] = t["url"]
     for pid in EXT_IDS:  # respaldo: los temas guardados de esa cuenta que son de este disco
         for i, t in enumerate(_ext_state(pid)["tracks"]):
             if album_key(t["artist"], t.get("album", "")) != key:
                 continue
             if norm(t["title"]) in tracks:
                 tracks[norm(t["title"])].setdefault("refs", {}).setdefault(pid, t["id"])
+                if _link(t.get("url")):
+                    tracks[norm(t["title"])].setdefault("links", {}).setdefault(pid, t["url"])
             else:
-                tracks[norm(t["title"])] = {"title": t["title"], "artist": t["artist"], "album": a["title"], "duration": t.get("duration"), "ids": {}, "refs": {pid: t["id"]}, "order": f"~{i:03d}"}
+                tracks[norm(t["title"])] = {"title": t["title"], "artist": t["artist"], "album": a["title"], "duration": t.get("duration"), "ids": {}, "refs": {pid: t["id"]}, "order": f"~{i:03d}",
+                                         **({"links": {pid: t["url"]}} if _link(t.get("url")) else {})}
     return {"album": a, "tracks": sorted(tracks.values(), key=lambda t: t["order"])}

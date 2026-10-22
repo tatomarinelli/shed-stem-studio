@@ -245,3 +245,20 @@ class TidalCovers(unittest.TestCase):
             [t.join() for t in threads]
         self.assertEqual(out, [b"img"] * 5)  # los 5 pedidos en paralelo reciben la portada
         self.assertEqual(len(loads), 1)
+
+
+class Links(Merge):
+    def test_enlaces_a_la_fuente_original(self):
+        catalog._ext["spotify"]["albums"][0]["url"] = "https://open.spotify.com/album/s1"
+        catalog._ext["spotify"]["albums"][1]["url"] = "https://evil.example/x"  # un dominio ajeno no se enlaza
+        catalog._bump()
+        by = {a["title"]: a for a in catalog.snapshot()["albums"]}
+        self.assertEqual(by["Kind of Blue"]["links"], {"spotify": "https://open.spotify.com/album/s1"})
+        self.assertEqual(by["Viejo"]["links"], {"tidal": "https://tidal.com/browse/album/t1"})
+        self.assertNotIn("links", by["Nuevo"])
+
+    def test_enlace_de_tema(self):
+        catalog._ext["spotify"]["tracks"][0]["url"] = "https://open.spotify.com/track/st1"
+        catalog._bump()
+        t = catalog.query("tracks")["items"][0]
+        self.assertEqual(t["links"], {"spotify": "https://open.spotify.com/track/st1"})

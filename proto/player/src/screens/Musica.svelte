@@ -8,11 +8,12 @@
   import Cover from '../components/Cover.svelte';
   import Combo from '../components/Combo.svelte';
   import TrackRow from '../components/TrackRow.svelte';
+  import OpenIn from '../components/OpenIn.svelte';
   import { playback, queueItem } from '../lib/playback.svelte';
 
   interface Ids { local?: string; tidal?: string; spotify?: string; ytmusic?: string }
-  interface Album { key: string; title: string; artist: string; year: number | null; genres: string[]; sources: string[]; localIds: string[]; tidalId: string | null; artUrl?: string }
-  interface Track { key: string; title: string; artist: string; album: string; duration: number; genres: string[]; sources: string[]; ids: Ids; artUrl?: string }
+  interface Album { key: string; title: string; artist: string; year: number | null; genres: string[]; sources: string[]; localIds: string[]; tidalId: string | null; artUrl?: string; links?: Record<string, string> }
+  interface Track { key: string; title: string; artist: string; album: string; duration: number; genres: string[]; sources: string[]; ids: Ids; artUrl?: string; links?: Record<string, string> }
   interface Facets { artists: { name: string; count: number }[]; genres: { name: string; count: number }[]; sources: Record<string, number> }
 
   const LIMIT = 60;
@@ -39,7 +40,7 @@
   let detailEl = $state<HTMLElement>();
   let cols = $state(1);
   let openAlbum = $state<Album | null>(null);
-  let albumTracks = $state<{ title: string; artist: string; album: string; duration: number; ids: Ids }[] | null>(null);
+  let albumTracks = $state<{ title: string; artist: string; album: string; duration: number; ids: Ids; links?: Record<string, string> }[] | null>(null);
   let albumError = $state('');
 
   let t = 0;
@@ -212,6 +213,7 @@
                 <div class="btns">
                   <button class="primary" onclick={() => playback.playFrom(albumQueue, 0)} disabled={!albumQueue.length}>Escuchar el álbum</button>
                   <button class="ghost" onclick={() => similar({ artist: openAlbum!.artist, album: openAlbum!.title })}>Recomendar parecidos</button>
+                  <OpenIn links={openAlbum.links} />
                 </div>
               </div>
             </div>
@@ -221,7 +223,7 @@
             {:else}
               <ul class="list">
                 {#each albumTracks as x, i (i + x.title)}
-                  <TrackRow compact n={i + 1} title={x.title} artist={x.artist} album={x.album} duration={mm(x.duration)} ids={x.ids} art={openAlbum.artUrl} queue={albumQueue} qi={i} />
+                  <TrackRow compact n={i + 1} title={x.title} artist={x.artist} album={x.album} duration={mm(x.duration)} ids={x.ids} links={x.links} art={openAlbum.artUrl} queue={albumQueue} qi={i} />
                 {:else}<li class="muted">Sin temas.</li>{/each}
               </ul>
             {/if}
@@ -233,7 +235,7 @@
     <ul class="list">
       {#each items as it (it.key + JSON.stringify(asTrack(it).ids))}
         {@const x = asTrack(it)}
-        <TrackRow compact title={x.title} artist={x.artist} album={x.album} meta={x.album} duration={mm(x.duration)} ids={x.ids} art={x.artUrl} badge={badge(x.sources)} />
+        <TrackRow compact title={x.title} artist={x.artist} album={x.album} meta={x.album} duration={mm(x.duration)} ids={x.ids} links={x.links} art={x.artUrl} badge={badge(x.sources)} />
       {/each}
     </ul>
   {/if}
@@ -281,8 +283,9 @@
   .detail { grid-column: 1 / -1; position: relative; display: grid; gap: 14px; padding: 18px 20px; border-radius: 18px; background: rgba(255, 255, 255, 0.06); border: 1px solid var(--glass-line); animation: rise 0.3s var(--ease) both; scroll-margin: 70px 0 150px; }
   .x { position: absolute; top: 12px; right: 12px; width: 32px; height: 32px; padding: 0; border-radius: 50%; }
   .ah { display: flex; gap: 18px; align-items: flex-end; padding-right: 40px; }
-  .ah div { display: grid; gap: 4px; min-width: 0; }
+  .ah > div { display: grid; gap: 4px; min-width: 0; }
   .ah h3 { margin: 0; font-size: 22px; letter-spacing: -0.01em; }
   .g { font-size: 13px; }
-  .btns { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
+  .btns { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 4px; }
+  .btns button { flex: none; }
 </style>
