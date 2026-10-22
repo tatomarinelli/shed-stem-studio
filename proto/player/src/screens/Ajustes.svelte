@@ -1,7 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { settings, type Config } from '../lib/settings.svelte';
-  import { tidal } from '../lib/tidal.svelte';
   import FolderPicker from '../components/FolderPicker.svelte';
   import Progress from '../components/Progress.svelte';
   import JobNote from '../components/JobNote.svelte';
@@ -96,17 +95,16 @@
             <span class="ok">prendido</span>
             <span class="muted">{svc.llm.installed} instalados{svc.llm.loaded.length ? `, en memoria: ${svc.llm.loaded.map(m => `${m.name} (${MB(m.bytes)})`).join(', ')}` : ', ninguno en memoria'}</span>
           {:else}<span class="warn">apagado</span>{/if}</li>
-        <li><b>TIDAL</b> <span class={svc.tidal.connected ? 'ok' : 'muted'}>{svc.tidal.connected ? 'conectado' : 'sin conectar'}</span></li>
         <li><b>Disco de hoy automático</b> <span class="muted">{svc.scheduler.auto ? `cada ${svc.scheduler.cadenceHours} h` : 'apagado'}</span></li>
       </ul>
-      <h4>En curso</h4>
       {#if svc.jobs.length}
+        <h4>En curso</h4>
         <ul class="svc">
           {#each svc.jobs as j (j.kind + j.label)}
             <li><b>{j.kind}</b> {j.label} {#if j.percent != null}<span class="muted num">{j.percent} %</span>{/if} {#if j.step}<span class="muted">{j.step}</span>{/if}</li>
           {/each}
         </ul>
-      {:else}<p class="muted">Nada por ahora.</p>{/if}
+      {/if}
       <div class="off">
         {#if !confirmOff}
           <button class="ghost danger" disabled={svc.jobs.length > 0} onclick={() => (confirmOff = true)}>Apagar el motor</button>
@@ -296,10 +294,6 @@
         {/each}
       </tbody>
     </table>
-
-    <h4>Conexiones</h4>
-    <p>TIDAL: {tidal.state === 'ready' ? 'conectado' : 'sin conectar'}
-      {#if tidal.state === 'ready'}<button class="ghost" onclick={() => tidal.logout()}>Desconectar</button>{/if}</p>
   </details>
 
   {#if picking}
