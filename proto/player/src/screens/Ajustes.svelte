@@ -153,7 +153,9 @@
 
     <div class="module">
       <h4>Recomendaciones</h4>
+      <h5>1 · Servidor</h5>
       <LlmDetect />
+      <h5>2 · Modelo</h5>
       <LlmServer />
       <ul class="models">
         {#each st.recommendations.models as m (m.label)}
@@ -181,7 +183,7 @@
         {/each}
         <li>
           <form class="custom" onsubmit={e => { e.preventDefault(); const n = customModel.trim(); if (n) settings.pull(n); }}>
-            <label>Otro modelo (nombre en Ollama, por ejemplo qwen3:8b)
+            <label>Otro: nombre de Ollama, ej. qwen3:8b
               <input bind:value={customModel} placeholder="nombre:etiqueta" autocomplete="off" spellcheck="false" />
             </label>
             {#if customModel.trim() && settings.pulls[customModel.trim()]?.state === 'running'}
@@ -281,6 +283,7 @@
   .card { background: var(--glass); backdrop-filter: blur(16px) saturate(1.3); border: 1px solid var(--glass-line); border-radius: var(--radius); padding: 16px 18px; box-shadow: 0 20px 50px -24px rgba(0,0,0,0.7); animation: rise 0.45s var(--ease) both; }
   .card p { margin: 4px 0; }
   .module + .module { margin-top: 6px; }
+  h5 { margin: 12px 0 2px; font-size: 13px; color: var(--muted); font-weight: 600; }
   .models, .paths { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
   .models li { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 10px 12px; border-radius: 12px; background: rgba(255,255,255,0.04); border: 1px solid transparent; transition: border-color 0.3s, background 0.3s; }
   .models li.use { border-color: color-mix(in srgb, #7cc7a3 55%, transparent); background: rgba(124, 199, 163, 0.08); }

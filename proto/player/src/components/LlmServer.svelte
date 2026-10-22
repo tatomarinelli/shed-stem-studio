@@ -13,7 +13,7 @@
 
 {#if llm}
   <div class="llm">
-    <b>Ollama</b>
+    <span>Modelos de <b>Ollama</b></span>
     {#if llm.installed}
       <span class="muted">{via}</span>
     {:else if job?.state === 'running'}<Progress job={job} verb="Instalando" oncancel={() => settings.cancelLlmInstall()} />

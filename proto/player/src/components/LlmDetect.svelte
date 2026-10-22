@@ -34,10 +34,9 @@
 
 <div class="det">
   <div class="top">
-    <b>Servidor de modelos</b>
+    <span class="muted">Quién responde las recomendaciones</span>
     <button class="ghost" disabled={settings.detecting} onclick={() => settings.detectLlm()}>{settings.detecting ? 'Buscando…' : 'Buscar de nuevo'}</button>
   </div>
-  <p class="muted note">Solo para las recomendaciones: separar en instrumentos no usa modelos de lenguaje. Acá no se descarga nada.</p>
   {#if settings.detectError}<p class="warn" role="alert">{settings.detectError}</p>{/if}
 
   {#if det}
@@ -112,16 +111,12 @@
     {#if det.binaries.ollama && !running.some(s => s.kind === 'ollama')}
       <p class="muted">Ollama está instalado pero apagado. El motor lo prende solo en su propio puerto al arrancar.</p>
     {/if}
-    {#each det.ollamaFolders as f (f.path)}
-      <p class="muted">Modelos de Ollama en <code>{f.path}</code>: {f.models}.</p>
-    {/each}
   {/if}
 </div>
 
 <style>
   .det { display: grid; gap: 6px; margin: 6px 0 12px; }
   .top { display: flex; gap: 10px; align-items: center; justify-content: space-between; }
-  .note { margin: 0; font-size: 0.82rem; }
   ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
   li { display: grid; gap: 6px; padding: 8px 10px; border: 1px solid var(--line, #3a332d); border-radius: 8px; }
   .row { display: flex; gap: 10px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
