@@ -76,16 +76,6 @@
   // Cualquier cambio de filtro, búsqueda, vista o catálogo vuelve a pedir desde el principio.
   $effect(() => { kind; source; artist; genre; sort; debounced; music.version; untrack(() => load(true)); });
   $effect(() => { untrack(() => { library.load(); }); });
-  // Al entrar, si lo de TIDAL, Spotify o YouTube Music tiene más de 10 minutos, se vuelve a leer solo (un álbum recién guardado aparece sin tocar nada).
-  let autoChecked = false;
-  $effect(() => {
-    const s = music.status;
-    if (autoChecked || !s || !SRC_ORDER.some(x => x !== 'local' && music.sources[x])) return;
-    autoChecked = true;
-    const stale = (j?: { refreshing: boolean; fetchedAt: number | null }) => !!j && !j.refreshing && (!j.fetchedAt || Date.now() / 1000 - j.fetchedAt > 600);
-    if (stale(s.tidal) || Object.values(s.providers ?? {}).some(stale)) untrack(() => music.refresh());
-  });
-
   $effect(() => {
     if (!sentinel) return;
     const io = new IntersectionObserver(es => { if (es[0].isIntersecting && !loading && !more && !failed && items.length < total) load(false); }, { rootMargin: '600px' });
@@ -115,6 +105,12 @@
   const noSources = $derived(!loading && !failed && !filtered && !SRC_ORDER.some(x => facets.sources[x]) && !music.working);
   const st = $derived(music.status);
   const busy = $derived(music.working);
+  // Última vez que se trajo algo de las cuentas (TIDAL, Spotify, YouTube Music); se actualiza solo con el botón.
+  const updatedAt = $derived(Math.max(0, st?.tidal.fetchedAt ?? 0, ...Object.values(st?.providers ?? {}).map(p => p.fetchedAt ?? 0)));
+  const ago = (t: number) => {
+    const s = Math.max(0, Date.now() / 1000 - t);
+    return s < 90 ? 'recién' : s < 5400 ? `hace ${Math.round(s / 60)} min` : s < 129600 ? `hace ${Math.round(s / 3600)} h` : `hace ${Math.round(s / 86400)} días`;
+  };
   const mm = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
   const badge = (s: string[]) => (source ? '' : s.map(x => SRC[x] ?? x).join(' + '));
   const clear = () => { query = ''; source = ''; artist = ''; genre = ''; };
@@ -142,7 +138,7 @@
   <h2>Música</h2>
   <div class="status">
     {#if st?.genres.running}<span class="muted num">Completando géneros {st.genres.done} de {st.genres.total}</span>{/if}
-    {#if busy && !st?.genres.running}<span class="muted">Actualizando…</span>{/if}
+    {#if busy && !st?.genres.running}<span class="muted">Actualizando…</span>{:else if updatedAt}<span class="muted num" title="La música de tus cuentas se guarda en esta computadora y solo se vuelve a pedir con Actualizar">Actualizado {ago(updatedAt)}</span>{/if}
     <button class="ghost" onclick={() => music.refresh()} disabled={busy}>Actualizar</button>
   </div>
 </div>

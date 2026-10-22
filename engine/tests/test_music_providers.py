@@ -163,3 +163,38 @@ class Covers(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d, mock.patch.object(extart, "_cache_dir", return_value=Path(d)), \
                 mock.patch.object(extart, "_urlopen", return_value=R()):
             self.assertIsNone(extart.fetch("https://i.scdn.co/image/abc"))
+
+
+class Cache(unittest.TestCase):
+    def test_portada_de_tidal_se_pide_una_sola_vez(self):
+        import extart
+        calls = []
+        with tempfile.TemporaryDirectory() as d, mock.patch.object(extart, "_cache_dir", return_value=Path(d)):
+            for _ in range(3):
+                got = extart.cached_cover("tidal:1", lambda: (calls.append(1), b"\x89PNGdata")[1])
+                self.assertEqual(got, b"\x89PNGdata")
+        self.assertEqual(len(calls), 1)
+
+    def test_biblioteca_de_tidal_sale_del_snapshot_sin_llamar_a_tidal(self):
+        with mock.patch.dict(catalog._tidal, {"fetchedAt": 5, "albums": [{"id": "1"}], "tracks": [], "playlists": [{"id": "p"}]}):
+            lib = catalog.tidal_library()
+        self.assertEqual((len(lib["albums"]), len(lib["playlists"])), (1, 1))
+        with mock.patch.dict(catalog._tidal, {"fetchedAt": None}):
+            self.assertIsNone(catalog.tidal_library())
+
+    def test_sesion_vencida_no_consulta_a_tidal_en_cada_sondeo(self):
+        import tidal_source as ts
+        calls = []
+
+        class S:
+            def check_login(self): return False
+
+        fake = types_ns = type("M", (), {"Session": lambda: S()})
+        with mock.patch.dict("sys.modules", {"tidalapi": fake}), mock.patch.object(ts, "_session", None), \
+                mock.patch.object(ts, "_load_session", side_effect=lambda s: (calls.append(1), True)[1]), \
+                mock.patch.object(ts.TIDAL_SESSION.__class__, "exists", return_value=True), \
+                mock.patch.dict(ts._expired, {"at": 0.0, "error": None}):
+            for _ in range(3):
+                with self.assertRaises(ts.SourceError):
+                    ts._get_session()
+        self.assertEqual(len(calls), 1)

@@ -329,7 +329,7 @@ class Handler(BaseHTTPRequestHandler):
             m = re.fullmatch(r"/engine/albumart/(\d{1,12})", path)
             if m:
                 try:
-                    data = tidal.album_art(m.group(1))
+                    data = extart.cached_cover(f"tidal:{m.group(1)}", lambda: tidal.album_art(m.group(1)))
                 except Exception:
                     return self._send(404, {"error": "no_art", "message": "Sin arte"})
                 self.send_response(200)
@@ -405,7 +405,7 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/engine/tidal/login/status":
                 return self._send(200, tidal.login_status())
             if path == "/engine/tidal/library":
-                return self._send(200, tidal.library())
+                return self._send(200, catalog.tidal_library() or tidal.library())  # de disco; solo la primera vez va a TIDAL
             m = re.fullmatch(r"/engine/tidal/playlists/([^/]+)", path)
             if m and ID_RE.match(m.group(1)):
                 return self._send(200, tidal.playlist_tracks(m.group(1)))

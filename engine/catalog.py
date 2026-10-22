@@ -25,7 +25,7 @@ import tidal_source
 _lock = threading.Lock()
 _version = 0
 _cache = {"v": -1, "data": None}
-_tidal = {"fetchedAt": None, "refreshing": False, "error": "", "albums": [], "tracks": []}
+_tidal = {"fetchedAt": None, "refreshing": False, "error": "", "albums": [], "tracks": [], "playlists": []}
 _ext = {}  # proveedor (spotify, ytmusic) -> {fetchedAt, refreshing, error, albums, tracks}
 EXT_IDS = ("spotify", "ytmusic")
 _genres = {}  # clave de disco -> {"genres": [...], "at": ts}
@@ -63,7 +63,7 @@ def _bump():
 def load_state():
     try:
         snap = json.loads((_dir() / "tidal.json").read_text())
-        _tidal.update(fetchedAt=snap.get("fetchedAt"), albums=snap.get("albums", []), tracks=snap.get("tracks", []))
+        _tidal.update(fetchedAt=snap.get("fetchedAt"), albums=snap.get("albums", []), tracks=snap.get("tracks", []), playlists=snap.get("playlists", []))
     except (OSError, ValueError):
         pass
     for pid in EXT_IDS:
@@ -109,9 +109,9 @@ def refresh_tidal():
                     continue
                 for t in items:
                     tracks.setdefault(t["id"], {**t, "collections": []})["collections"].append(p["name"])
-            _tidal.update(albums=lib["albums"], tracks=list(tracks.values()), fetchedAt=time.time(),
+            _tidal.update(albums=lib["albums"], tracks=list(tracks.values()), playlists=lib["playlists"], fetchedAt=time.time(),
                           error=f"No pude leer {skipped} playlist{'s' if skipped != 1 else ''}." if skipped else "")
-            _save("tidal.json", {"fetchedAt": _tidal["fetchedAt"], "albums": _tidal["albums"], "tracks": _tidal["tracks"]})
+            _save("tidal.json", {"fetchedAt": _tidal["fetchedAt"], "albums": _tidal["albums"], "tracks": _tidal["tracks"], "playlists": _tidal["playlists"]})
             _bump()
             enrich_genres()
         except tidal_source.SourceError as e:
@@ -122,6 +122,14 @@ def refresh_tidal():
             _tidal["refreshing"] = False
 
     threading.Thread(target=work, daemon=True).start()
+
+
+def tidal_library():
+    """Lo último que se trajo de TIDAL (de disco, sobrevive a reiniciar el motor); None si todavía no se actualizó nunca.
+    Se actualiza solo con "Actualizar": abrir pantallas no vuelve a llamar a TIDAL."""
+    if not _tidal["fetchedAt"]:
+        return None
+    return {"albums": _tidal["albums"], "tracks": _tidal["tracks"], "artists": [], "playlists": _tidal["playlists"], "fetchedAt": _tidal["fetchedAt"]}
 
 
 def _ext_state(pid):

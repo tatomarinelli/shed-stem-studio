@@ -12,7 +12,9 @@ from pathlib import Path
 
 CONFIG_DIR = osenv.config_dir()
 TIDAL_SESSION = CONFIG_DIR / "tidal-session.json"
-CACHE_SECONDS = 60
+CACHE_SECONDS = 3600  # búsquedas por artista/título
+LONG_SECONDS = 24 * 3600  # biblioteca, playlists y discos: solo cambian cuando el usuario toca Actualizar (clear_cache)
+EXPIRED_RETRY = 60  # con la sesión vencida no se vuelve a consultar a TIDAL en cada sondeo
 PAGE = 50          # tamaño de página que TIDAL acepta en todos los listados
 MAX_ITEMS = 20000  # tope de seguridad contra un servidor que repita páginas para siempre
 
@@ -26,6 +28,7 @@ class SourceError(Exception):
 _lock = threading.Lock()
 _start_lock = threading.Lock()
 _session = None
+_expired = {"at": 0.0, "error": None}
 _cache = {}
 _login = {"state": "idle", "message": ""}  # idle | pending | done | expired | error
 _attempt = None  # el único intento de login vigente (o None)
@@ -35,6 +38,8 @@ def _get_session():
     global _session
     if _session is not None:
         return _session
+    if _expired["error"] and time.time() - _expired["at"] < EXPIRED_RETRY:
+        raise _expired["error"]
     try:
         import tidalapi
     except ImportError:
@@ -43,7 +48,9 @@ def _get_session():
         raise SourceError("no_session", "Todavía no conectaste TIDAL. Tocá Conectar TIDAL para iniciar sesión.")
     session = tidalapi.Session()
     if not _load_session(session) or not session.check_login():
-        raise SourceError("session_expired", "La sesión de TIDAL venció. Tocá Conectar TIDAL para iniciar sesión de nuevo.")
+        _expired.update(at=time.time(), error=SourceError("session_expired", "La sesión de TIDAL venció. Tocá Conectar TIDAL para iniciar sesión de nuevo."))
+        raise _expired["error"]
+    _expired["error"] = None
     _session = session
     return session
 
@@ -66,9 +73,9 @@ def _load_session(session):
         Path(tmp).unlink(missing_ok=True)
 
 
-def _cached(key, fn):
+def _cached(key, fn, ttl=CACHE_SECONDS):
     hit = _cache.get(key)
-    if hit and time.time() - hit[0] < CACHE_SECONDS:
+    if hit and time.time() - hit[0] < ttl:
         return hit[1]
     value = fn()
     _cache[key] = (time.time(), value)
@@ -107,7 +114,7 @@ def album_by_id(album_id):
         return {"id": str(album.id), "title": album.name, "artist": album.artist.name if album.artist else "",
                 "tracks": [_track(t) for t in album.tracks()]}
     with _lock:
-        return _cached(f"albumid:{album_id}", build)
+        return _cached(f"albumid:{album_id}", build, LONG_SECONDS)
 
 
 def album_art(album_id):
@@ -171,7 +178,7 @@ def library():
             "playlists": playlists,
         }
     with _lock:
-        return _cached("library", build)
+        return _cached("library", build, LONG_SECONDS)
 
 
 def playlist_tracks(playlist_id):
@@ -179,7 +186,7 @@ def playlist_tracks(playlist_id):
         pl = _get_session().playlist(playlist_id)
         return {"tracks": [_track(t) for t in paged(lambda n, o: pl.tracks(limit=n, offset=o))]}
     with _lock:
-        return _cached("pl:" + playlist_id, build)
+        return _cached("pl:" + playlist_id, build, LONG_SECONDS)
 
 
 MIN_REUSE_SECONDS = 20  # si al código vigente le quedan menos, mejor pedir otro
@@ -229,6 +236,7 @@ def _wait_login(attempt, session):
                 if _attempt is not attempt:
                     return
                 _session = None
+                _expired["error"] = None
                 _cache.clear()
                 _login.update(state="done", message="")
             return
@@ -292,6 +300,7 @@ def logout():
             _attempt["cancel"].set()
         _attempt = None
         _session = None
+        _expired["error"] = None
         _cache.clear()
         _login.update(state="idle", message="")
         TIDAL_SESSION.unlink(missing_ok=True)

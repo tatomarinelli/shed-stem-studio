@@ -51,3 +51,20 @@ def fetch(url):
     except OSError:
         pass
     return body, ctype
+
+
+def cached_cover(key, produce):
+    """Bytes de una portada guardada en disco con esa clave; si no está, `produce()` la pide una vez y la guarda."""
+    f = _cache_dir() / f"{hashlib.sha1(key.encode()).hexdigest()}.cover"
+    try:
+        return f.read_bytes()
+    except OSError:
+        pass
+    data = produce()
+    if data and len(data) <= MAX_BYTES:
+        try:
+            f.parent.mkdir(parents=True, exist_ok=True)
+            f.write_bytes(data)
+        except OSError:
+            pass
+    return data

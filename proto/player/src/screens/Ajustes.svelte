@@ -26,15 +26,6 @@
   const hw = $derived(settings.hardware);
   const st = $derived(settings.storage);
   const eff = $derived(settings.effective);
-  // Fuentes de audio: orden de preferencia. Desactivar una la saca de la lista que guarda el motor.
-  const active = $derived<string[]>(settings.sources.filter(s => s.enabled).map(s => s.id));
-  function move(id: string, delta: number) {
-    const ids = active.slice(), i = ids.indexOf(id), j = i + delta;
-    if (i < 0 || j < 0 || j >= ids.length) return;
-    [ids[i], ids[j]] = [ids[j], ids[i]];
-    settings.save({ audioSources: ids });
-  }
-  const toggle = (id: string, on: boolean) => settings.save({ audioSources: on ? [...active, id] : active.filter(x => x !== id) });
   const base = (label: string) => label.split(':')[0];
   // Un modelo es "recomendado" si está en el catálogo de Shed Stem Studio y entra en este equipo.
   const recommended = (label: string) => hw?.models.some(c => c.fits && c.id === base(label)) ?? false;
@@ -210,24 +201,6 @@
   </section>
 
   <section class="card">
-    <h3>Fuentes de audio</h3>
-    <p class="muted">Se prueban en este orden. Si el tema ya está separado, se usa ese.</p>
-    <ol class="srcs">
-      {#each settings.sources as src (src.id)}
-        {@const pos = active.indexOf(src.id)}
-        <li class:off={!src.enabled}>
-          <label class="sw"><input type="checkbox" checked={src.enabled} onchange={e => toggle(src.id, e.currentTarget.checked)} aria-label="Usar {src.label}" /></label>
-          <div class="nm"><b>{src.label}</b> <span class={src.available ? 'ok' : 'warn'}>{src.detail}</span></div>
-          <div class="mv">
-            <button class="ghost" disabled={!src.enabled || pos <= 0} onclick={() => move(src.id, -1)} aria-label="Subir {src.label}">Subir</button>
-            <button class="ghost" disabled={!src.enabled || pos < 0 || pos >= active.length - 1} onclick={() => move(src.id, 1)} aria-label="Bajar {src.label}">Bajar</button>
-          </div>
-        </li>
-      {/each}
-    </ol>
-  </section>
-
-  <section class="card">
     <h3>Tu equipo</h3>
     <dl class="hw">
       {#each hw.gpus as g (g.name)}
@@ -307,11 +280,6 @@
   h4 { margin: 14px 0 6px; font-size: 15px; color: var(--muted); font-weight: 600; }
   .card { background: var(--glass); backdrop-filter: blur(16px) saturate(1.3); border: 1px solid var(--glass-line); border-radius: var(--radius); padding: 16px 18px; box-shadow: 0 20px 50px -24px rgba(0,0,0,0.7); animation: rise 0.45s var(--ease) both; }
   .card p { margin: 4px 0; }
-  .srcs { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 6px; counter-reset: s; }
-  .srcs li { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 14px; padding: 10px 12px; border-radius: 12px; background: rgba(255,255,255,0.04); transition: opacity 0.3s; }
-  .srcs li.off { opacity: 0.5; }
-  .sw input { width: 18px; height: 18px; accent-color: #7cc7a3; }
-  .mv { display: flex; gap: 6px; }
   .module + .module { margin-top: 6px; }
   .models, .paths { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
   .models li { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 10px 12px; border-radius: 12px; background: rgba(255,255,255,0.04); border: 1px solid transparent; transition: border-color 0.3s, background 0.3s; }
