@@ -193,13 +193,13 @@ def read_sources():
     """Favoritos de TIDAL con la fecha en que se agregaron. Se guardan en sources.json para recalcular sin red."""
     fav = tidal_source.session().user.favorites
     items = []
-    for a in fav.artists(limit=tidal_source.FAV_ARTISTS):
+    for a in tidal_source.paged(lambda n, o: fav.artists(limit=n, offset=o)):
         items.append({"kind": "artist", "artist": a.name, "added": _ts(a)})
-    for a in fav.albums(limit=tidal_source.FAV_ALBUMS):
+    for a in tidal_source.paged(lambda n, o: fav.albums(limit=n, offset=o)):
         y = getattr(a, "year", None) or getattr(getattr(a, "release_date", None), "year", None)
         items.append({"kind": "album", "artist": a.artist.name if a.artist else "", "title": a.name, "added": _ts(a),
                       "year": y if isinstance(y, int) else None})
-    for t in fav.tracks(limit=tidal_source.FAV_TRACKS):
+    for t in tidal_source.paged(lambda n, o: fav.tracks(limit=n, offset=o)):
         items.append({"kind": "track", "artist": t.artist.name if t.artist else "", "title": t.album.name if t.album else "",
                       "track": t.name, "added": _ts(t)})
     own = own_artists()

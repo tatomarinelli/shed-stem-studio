@@ -216,7 +216,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(200, catalog.query(
                     kind="tracks" if q.get("kind") == "tracks" else "albums", q=q.get("q", "")[:100], source=q.get("source", "")[:10],
                     artist=q.get("artist", "")[:160], genre=q.get("genre", "")[:60],
-                    limit=min(int(q.get("limit", 60)), 200), offset=max(int(q.get("offset", 0)), 0)))
+                    sort=q.get("sort", "saved")[:10], limit=min(int(q.get("limit", 60)), 200), offset=max(int(q.get("offset", 0)), 0)))
             if path == "/engine/music/album":
                 d = catalog.album_detail(urllib.parse.parse_qs(url.query).get("key", [""])[0][:300])
                 return self._send(200 if d else 404, d or {"error": "not_found", "message": "No encontré ese disco."})
