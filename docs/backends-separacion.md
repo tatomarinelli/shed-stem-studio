@@ -30,7 +30,7 @@ Recomendación hoy: NVIDIA con CUDA → `cuda`; todo lo demás → `cpu`, y el t
 | **Ollama + CUDA** | NVIDIA | Funciona (Linux, RTX 5080) | Camino actual |
 | **Ollama + ROCm** | AMD en la lista de ROCm | Sin verificar | La documentación de Ollama advierte que algunas RDNA2 pueden no exponer ROCm v7 en Windows |
 | **Ollama + Vulkan** | AMD fuera de la lista, Intel | **Verificado en la RX 6700S** (Windows 11, Ollama 0.40.7) | Vulkan viene activado por defecto. Ollama detecta la placa (`library=Vulkan`), descarta la integrada y deja ROCm de lado. llama3.2:3b (2,39 GB) entero en la placa: **88,8 tokens/s contra 20,9 en CPU** (4,2×); prompt 4.042 contra 977 tokens/s. El monitor del motor ve la VRAM ocupada y el modelo cargado |
-| **llama.cpp (llama-server) con Vulkan** | AMD, Intel, NVIDIA | Alternativa si Ollama no usa la placa | Ollama está construido sobre llama.cpp. `llama-server` ofrece API compatible con OpenAI, **no** la de Ollama: `models.py` y `recs.py` hoy hablan la API de Ollama, así que haría falta un adaptador |
+| **llama.cpp (llama-server)** | NVIDIA (CUDA), AMD/Intel (Vulkan), CPU | **Soportado para recomendaciones, sin verificar contra un llama-server real** (2026-10-22). Se detecta, se prende con un clic sobre un `.gguf` ya descargado y se usa con `llmProvider: "llamacpp"` | Ollama está construido sobre llama.cpp. `llama-server` habla la API compatible con OpenAI (`/v1/chat/completions`, `/v1/models`), no la de Ollama: `models.chat()` y `models.ollama_tags()` son el único punto que traduce. Sin descargas (consistente con «nada se descarga solo»), sin `/api/ps` ni `/api/embed` (los embeddings de géneros caen al cruce por palabras). Mantiene la VRAM tomada hasta que se lo apaga; Ollama la libera solo (`keep_alive`) |
 | **CPU** | Cualquiera | Siempre disponible | Mucho más lento con modelos de 12B |
 
 Medición (2026-10-21, `/api/generate`, 200 tokens, temperatura 0, modelo ya cargado): Vulkan 88,8 tok/s, CPU (`OLLAMA_VULKAN=0`) 20,9 tok/s. Falta medir un modelo de 12B, que con 8 GB de VRAM entra apenas o parcialmente (Ollama reparte capas entre placa y CPU), y comprobar la velocidad de ese reparto.
@@ -43,12 +43,26 @@ Consecuencia en el código: `hardware._gpus` distingue `accel` (separación) de 
 2. Muestra el motor recomendado con el motivo y las alternativas (instalables o "Próximamente", con "Sin verificar en este sistema" donde corresponde).
 3. Con el clic de **Instalar**, `POST /engine/env/install {"backend": id}` instala el archivo de requisitos de ese motor en la carpeta elegida; deja `backend.txt` junto al entorno para saber cuál es.
 
+## 3b. Servidores de modelos que el usuario ya tiene (2026-10-22)
+
+`engine/llmdetect.py`, `GET /engine/llm/detect`, `components/LlmDetect.svelte` (Ajustes y asistente). Solo mira, nunca descarga ni instala:
+
+- **Puertos locales** (127.0.0.1): 11434 (Ollama), 11500 (Ollama propio), 8080/8081 (llama-server), 1234 (LM Studio) y el de `llmUrl`. Se reconoce por la forma de la respuesta (`/api/version`, `/props`, `/v1/models`), no por el puerto.
+- **Binarios**: `ollama` y `llama-server` en el PATH o en carpetas conocidas de cada sistema (`osenv.find_llama_server`, `STEMSHED_LLAMA_SERVER`).
+- **Modelos**: `.gguf` en `LLAMA_CACHE`, `~/.cache/llama.cpp` (Linux) o `%LOCALAPPDATA%\llama.cpp` (Windows), LM Studio y Hugging Face (`osenv.gguf_roots`); manifiestos de Ollama (`osenv.ollama_model_roots`). Acotado a 200 archivos, sin los `mmproj` ni los menores de 50 MB.
+- **Orden en la UI**: «Ya prendidos» (Usar este) → «Instalado, sin prender» (llama-server + modelo + Prender…) → instalar Ollama (`LlmServer`). Cada acción pide confirmación con el resumen de lo que va a pasar.
+- **Levantar llama-server**: `POST /engine/llm/llamacpp/start {model}`; el modelo tiene que estar en lo detectado, escucha en 127.0.0.1 (puerto libre de 8081 a 8089), `-c 8192 --jinja -ngl 99`. Se espera a `/health`; cancelar o apagar lo mata (`osenv.kill_tree`) y el apagado del motor también. Al cargar queda en uso (`llmUrl` + `llmProvider`); «Apagar» vuelve a Ollama.
+- **Decisión**: no se adopta la carpeta de modelos de un Ollama ajeno; se usa su servidor (ve sus modelos por `/api/tags`). Dos Ollama compartiendo carpeta es frágil y la carpeta del servicio suele no ser escribible.
+- **Separación**: sin cambios. llama.cpp/Ollama no sirven para BS-Roformer ni Demucs. En el selector las opciones salen agrupadas: «Para instalar ahora» (el recomendado primero), «No son para tu equipo», «Próximamente».
+
 ## 4. Pendiente
 
 - Medir la separación en CPU en esta notebook (línea base).
 - Medir un modelo de 12B (Mistral Nemo) con reparto parcial entre placa y CPU.
 - Evaluar exportar BS-Roformer-SW a ONNX y correrlo con DirectML; mientras tanto, Demucs ONNX + DirectML como camino AMD de menor calidad.
 - Verificar CUDA en Windows con una máquina NVIDIA.
+- Probar un llama-server real (Linux y Windows): `response_format` json_schema en la versión instalada, tiempo de carga, `/props`. Hasta entonces la prueba fue con un servidor falso y tests simulados.
+- Windows: rutas de `osenv.llama_server_dirs`/`gguf_roots` sin verificar en un equipo real.
 
 ## Fuentes
 - ROCm en Windows, requisitos: https://rocm.docs.amd.com/projects/install-on-windows/en/latest/reference/system-requirements.html

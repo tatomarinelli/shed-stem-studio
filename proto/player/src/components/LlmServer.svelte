@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { settings } from '../lib/settings.svelte';
   import Progress from './Progress.svelte';
+  import JobNote from './JobNote.svelte';
 
   onMount(() => { void settings.loadLlm(); });
 
@@ -15,11 +16,11 @@
     <b>Ollama</b>
     {#if llm.installed}
       <span class="muted">{via}</span>
-    {:else if job?.state === 'running'}<Progress job={job} verb="Instalando" />
+    {:else if job?.state === 'running'}<Progress job={job} verb="Instalando" oncancel={() => settings.cancelLlmInstall()} />
     {:else if llm.canInstall}
       <span class="muted">≈ {llm.approxGb.toLocaleString('es-AR')} GB</span>
       <button class="primary" onclick={() => settings.installLlm()}>Instalar</button>
-      {#if job?.state === 'error'}<span class="warn" role="alert">{job.message}</span>{/if}
+      <JobNote job={job} />
     {:else}<span class="warn">Falta instalarlo (ollama.com)</span>{/if}
   </div>
 {/if}

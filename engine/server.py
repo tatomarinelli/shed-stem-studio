@@ -23,6 +23,7 @@ import destinations  # noqa: E402
 import envsetup  # noqa: E402
 import hardware  # noqa: E402
 import library  # noqa: E402
+import llmdetect  # noqa: E402
 import llmserver  # noqa: E402
 import services  # noqa: E402
 import firstrun  # noqa: E402
@@ -50,7 +51,9 @@ def apply_settings():
     s = settings.effective()
     stems.configure(s["dataDir"], s["separationEnvDir"], s["separationModelsDir"])
     analysis.configure(s["dataDir"], s["separationEnvDir"])
-    return models.configure(s["ollamaModelsDir"], s["llmUrl"])
+    restart = models.configure(s["ollamaModelsDir"], s["llmUrl"], s["llmProvider"])
+    recs.genresim.configure(s["dataDir"], models.OLLAMA)  # los embeddings siguen al servidor elegido
+    return restart
 
 
 def error_detail(e):
@@ -286,8 +289,12 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(200, llmserver.ffmpeg_status())
             if path == "/engine/llm/status":
                 return self._send(200, llmserver.status())
+            if path == "/engine/llm/detect":
+                return self._send(200, llmdetect.detect(force=True))
             if path == "/engine/backends":
                 return self._send(200, backends.report(hardware._gpus()))
+            if path == "/engine/models/pulls":
+                return self._send(200, models.pulls_status())
             if path == "/engine/models/separation/status":
                 return self._send(200, stems.sep_download_status())
             m = re.fullmatch(r"/engine/models/([A-Za-z0-9._:/-]{1,100})/status", urllib.parse.unquote(path))
@@ -367,6 +374,15 @@ class Handler(BaseHTTPRequestHandler):
                 if choice is not None and not (isinstance(choice, str) and ID_RE.match(choice)):
                     return self._send(400, {"error": "bad_request", "message": "Motor de separación inválido."})
                 return self._send(200, envsetup.start(choice))
+            if path == "/engine/ffmpeg/cancel":
+                return self._send(200, llmserver.ffmpeg_install_cancel())
+            if path == "/engine/llm/cancel":
+                return self._send(200, llmserver.install_cancel())
+            if path == "/engine/llm/llamacpp/start":
+                body = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))) or b"{}")
+                return self._send(200, llmdetect.start_llamacpp(str(body.get("model", ""))))
+            if path == "/engine/llm/llamacpp/stop":
+                return self._send(200, llmdetect.stop_llamacpp())
             if path == "/engine/ffmpeg/install":
                 return self._send(200, llmserver.ffmpeg_install_start())
             if path == "/engine/llm/install":
@@ -376,6 +392,9 @@ class Handler(BaseHTTPRequestHandler):
             m = re.fullmatch(r"/engine/models/([A-Za-z0-9._:/-]{1,100})/pull", urllib.parse.unquote(path))
             if m:
                 return self._send(200, models.pull_start(m.group(1)))
+            m = re.fullmatch(r"/engine/models/([A-Za-z0-9._:/-]{1,100})/cancel", urllib.parse.unquote(path))
+            if m:
+                return self._send(200, models.pull_cancel(m.group(1)))
             if path == "/engine/save":
                 # ESCRIBE en las cuentas del usuario: solo con confirmación explícita de la interfaz.
                 size = int(self.headers.get("Content-Length", 0))
@@ -427,7 +446,7 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(404, {"error": "not_found", "message": "Ruta desconocida"})
         except settings.SettingsError as e:
             return self._send(400, {"error": "settings", "message": str(e)})
-        except (stems.StemsError, analysis.AnalysisError, envsetup.EnvError, llmserver.LlmServerError, services.OpenError, ValueError) as e:
+        except (stems.StemsError, analysis.AnalysisError, envsetup.EnvError, llmserver.LlmServerError, llmdetect.DetectError, services.OpenError, ValueError) as e:
             return self._send(409, {"error": "stems", "message": str(e)})
         except tidal.SourceError as e:
             return self._send(409, {"error": e.code, "message": e.message})

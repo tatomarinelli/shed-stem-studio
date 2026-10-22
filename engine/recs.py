@@ -486,25 +486,20 @@ def seed_text(seed):
 
 
 def ask_model(model, user, tries=3, temperature=0.7):
-    body = {"model": model, "stream": False, "format": SCHEMA, "keep_alive": "10m",
-            "options": {"temperature": temperature, "num_predict": NUM_PREDICT},
-            "messages": [{"role": "system", "content": SYSTEM}, {"role": "user", "content": user}]}
     last = None
     for i in range(tries):  # otro proceso puede estar usando la GPU: tiempos largos y reintentos
         try:
-            req = urllib.request.Request(models.OLLAMA + "/api/chat", json.dumps(body).encode(), {"Content-Type": "application/json"})
-            with urllib.request.urlopen(req, timeout=600) as r:
-                reply = json.load(r)
+            content, prompt_tokens, eval_tokens = models.chat(model, SYSTEM, user, SCHEMA, temperature, NUM_PREDICT)
             break
         except (urllib.error.URLError, TimeoutError, ConnectionError) as e:
             last = e
             time.sleep(5 * (i + 1))
     else:
         raise ValueError(f"El servidor de modelos no respondió ({type(last).__name__}).")
-    stats = {"promptTokens": reply.get("prompt_eval_count"), "evalTokens": reply.get("eval_count")}
+    stats = {"promptTokens": prompt_tokens, "evalTokens": eval_tokens}
     if stats["promptTokens"] and stats["promptTokens"] + NUM_PREDICT > CTX_LIMIT:
         raise ValueError(f"El pedido al modelo es demasiado largo ({stats['promptTokens']} tokens).")
-    data = json.loads(reply["message"]["content"])
+    data = json.loads(content)
     items = data.get("discos") if isinstance(data, dict) else None
     if not isinstance(items, list):
         raise ValueError("El modelo no devolvió la lista de discos esperada.")
@@ -520,12 +515,8 @@ def ask_model(model, user, tries=3, temperature=0.7):
 
 def ask_text(model, system, user):
     """Pedido corto al modelo con salida JSON (para resumir un texto dado)."""
-    body = {"model": model, "stream": False, "keep_alive": "10m", "options": {"temperature": 0.2, "num_predict": 300},
-            "format": {"type": "object", "required": ["resumen"], "properties": {"resumen": {"type": "string"}}},
-            "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}]}
-    req = urllib.request.Request(models.OLLAMA + "/api/chat", json.dumps(body).encode(), {"Content-Type": "application/json"})
-    with urllib.request.urlopen(req, timeout=300) as r:
-        return json.load(r)["message"]["content"]
+    schema = {"type": "object", "required": ["resumen"], "properties": {"resumen": {"type": "string"}}}
+    return models.chat(model, system, user, schema, 0.2, 300, timeout=300)[0]
 
 
 # ---------------------------------------------------------------- relevancia y motivo (determinísticos)

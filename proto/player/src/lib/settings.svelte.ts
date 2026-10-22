@@ -13,19 +13,35 @@ export interface Candidate { id: string; label: string; module: string; gb: numb
 export interface HardwareReport {
   gpus: Gpu[]; ram: { totalGB: number; availableGB: number }; cpu: { name: string; threads: number }; disks: Disk[]; models: Candidate[];
 }
-export interface BackendOption { id: string; label: string; approxGb: number | null; installable: boolean; compatible: boolean; requires: string | null; recommended: boolean; verified: boolean; note: string }
+export interface BackendOption { group?: 'available' | 'incompatible' | 'soon'; id: string; label: string; approxGb: number | null; installable: boolean; compatible: boolean; requires: string | null; recommended: boolean; verified: boolean; note: string }
 export interface BackendReport { recommended: string; reason: string; gpu: string | null; options: BackendOption[] }
 export interface LlmServer {
   installed: boolean; running: boolean; canInstall: boolean; approxGb: number;
   accel: 'cuda' | 'vulkan' | 'cpu'; gpu: string | null; job: Pull;
 }
-export interface Config { audioSources: string[]; dataDir: string; ollamaModelsDir: string; separationModelsDir: string; separationEnvDir: string; musicFolders: string[]; llmUrl: string; llmModel: string }
+export interface Config { llmProvider: 'ollama' | 'llamacpp'; audioSources: string[]; dataDir: string; ollamaModelsDir: string; separationModelsDir: string; separationEnvDir: string; musicFolders: string[]; llmUrl: string; llmModel: string }
 export interface AudioSource { id: 'local' | 'tidal'; label: string; enabled: boolean; available: boolean; detail: string }
-export interface Pull { state: 'idle' | 'running' | 'done' | 'error' | 'cancelled'; percent?: number; message?: string; done?: number; total?: number; rate?: number; step?: string; approx?: boolean }
+export interface Pull {
+  state: 'idle' | 'running' | 'done' | 'error' | 'cancelled'; percent?: number; message?: string; done?: number; total?: number; rate?: number;
+  step?: string; approx?: boolean;
+  /** Epoch (s) de cuando arrancó y de la última vez que avanzó algo de verdad; los pone el motor. */
+  startedAt?: number; updated?: number;
+  /** El motor está cortando la tarea; `cancelable: false` = ya no se puede cortar sin dejarla a medias. */
+  cancelling?: boolean; cancelable?: boolean;
+  /** Aviso de la interfaz (por ejemplo, por qué no se pudo cancelar). */
+  notice?: string;
+}
+export interface DetectedServer { kind: 'ollama' | 'llamacpp' | 'openai'; port: number; url: string; version: string | null; models: string[]; current: boolean; own: boolean }
+export interface DetectedGguf { path: string; name: string; bytes: number; folder: string }
+export interface LlmDetect {
+  servers: DetectedServer[]; binaries: { ollama: string | null; llamaServer: string | null };
+  ollamaFolders: { path: string; models: number }[]; ggufs: DetectedGguf[];
+  own: { running: boolean; port: number | null; model: string | null; job: Pull }; current: string; provider: 'ollama' | 'llamacpp';
+}
 export interface Job { kind: string; label: string; percent?: number; step?: string }
 export interface Services {
   engine: { host: string; port: number; pid: number; uptimeSec: number; docker: boolean; origins: string[]; hostPaths: Record<string, { path: string; var: string }> };
-  llm: { url: string; running: boolean; own: boolean; loaded: { name: string; bytes: number }[]; installed: number };
+  llm: { url: string; provider?: string; running: boolean; own: boolean; loaded: { name: string; bytes: number }[]; installed: number };
   tidal: { connected: boolean };
   scheduler: { auto: boolean; cadenceHours: number };
   jobs: Job[];
@@ -59,18 +75,56 @@ class Settings {
     this.#svcTimer = window.setInterval(() => void this.loadServices(), 4000);
   }
 
-  /** Retoma el estado de las descargas que siguen en el motor (por ejemplo, tras recargar la página). */
-  async syncJobs(pullIds: string[] = []) {
+  /** Sondeos de tareas largas, uno por clave: cada tarea se mira hasta que deja de estar en curso (también tras recargar la página). */
+  #timers = new Map<string, number>();
+
+  #watch(key: string, tick: () => Promise<boolean>, ms: number, after?: () => Promise<void>) {
+    if (this.#timers.has(key)) return; // ya se está siguiendo
+    const id = window.setInterval(async () => {
+      let running = false;
+      try { running = await tick(); } catch { running = true; /* un tropiezo de red no corta el seguimiento */ }
+      if (running) return;
+      window.clearInterval(id);
+      this.#timers.delete(key);
+      if (after) await after();
+    }, ms);
+    this.#timers.set(key, id);
+  }
+
+  async #json<T>(url: string): Promise<T> { return (await fetch(url)).json(); }
+
+  watchEnv() { this.#watch('env', async () => { this.envPull = await this.#json<Pull>('/engine/env/status'); return this.envPull.state === 'running'; }, 2000, () => this.load()); }
+  watchSep() { this.#watch('sep', async () => { this.sepPull = await this.#json<Pull>('/engine/models/separation/status'); return this.sepPull.state === 'running'; }, 1500, () => this.load()); }
+  watchFfmpeg() { this.#watch('ffmpeg', async () => { await this.loadFfmpeg(); return this.ffmpeg?.job.state === 'running'; }, 2000); }
+  watchLlmInstall() { this.#watch('llm', async () => { await this.loadLlm(); return this.llm?.job.state === 'running'; }, 2000, () => this.load()); }
+  watchPull(id: string) {
+    this.#watch('pull:' + id, async () => {
+      const st = await this.#json<Pull>(`/engine/models/${encodeURIComponent(id)}/status`);
+      this.pulls[id] = st;
+      return st.state === 'running';
+    }, 1500, () => this.load());
+  }
+
+  /** Retoma el estado de las tareas que siguen en el motor (por ejemplo, tras recargar la página) y vuelve a seguirlas. */
+  async syncJobs() {
     try {
-      const [e, s] = await Promise.all([fetch('/engine/env/status'), fetch('/engine/models/separation/status')]);
-      const env: Pull = await e.json(), sep: Pull = await s.json();
-      if (env.state !== 'idle' && this.envPull.state !== 'running') this.envPull = env;
-      else if (env.state === 'running') this.envPull = env;
-      if (sep.state !== 'idle' && this.sepPull.state !== 'running') this.sepPull = sep;
-      else if (sep.state === 'running') this.sepPull = sep;
-      for (const id of pullIds) {
-        const st: Pull = await (await fetch(`/engine/models/${encodeURIComponent(id)}/status`)).json();
-        if (st.state !== 'idle') this.pulls[id] = st;
+      const [env, sep, ff, llm] = await Promise.all([
+        this.#json<Pull>('/engine/env/status'), this.#json<Pull>('/engine/models/separation/status'),
+        this.#json<{ installed: boolean; canInstall: boolean; job: Pull }>('/engine/ffmpeg/status'), this.#json<LlmServer>('/engine/llm/status'),
+      ]);
+      if (env.state !== 'idle') this.envPull = env;
+      if (env.state === 'running') this.watchEnv();
+      if (sep.state !== 'idle') this.sepPull = sep;
+      if (sep.state === 'running') this.watchSep();
+      this.ffmpeg = { ...ff, job: ff.job.state === 'idle' && this.ffmpeg?.job.state === 'error' ? this.ffmpeg.job : ff.job };
+      if (ff.job.state === 'running') this.watchFfmpeg();
+      this.llm = { ...llm, job: llm.job.state === 'idle' && this.llm?.job.state === 'error' ? this.llm.job : llm.job };
+      if (llm.job.state === 'running') this.watchLlmInstall();
+      const all = await this.#json<Record<string, Pull>>('/engine/models/pulls');
+      for (const [id, st] of Object.entries(all)) {
+        if (st.state === 'idle' || (this.pulls[id]?.state === 'error' && st.state !== 'running')) continue;
+        this.pulls[id] = st;
+        if (st.state === 'running') this.watchPull(id);
       }
     } catch { /* motor apagado: lo informa el estado general */ }
   }
@@ -101,7 +155,6 @@ class Settings {
   config = $state<Config | null>(null);
   effective = $state<Config | null>(null);
   saveMessage = $state<{ ok: boolean; text: string } | null>(null);
-  #timer = 0;
 
   async load() {
     try {
@@ -135,12 +188,9 @@ class Settings {
     }
   }
 
-  #sepTimer = 0;
-  #envTimer = 0;
   envPull = $state<Pull>({ state: 'idle' });
 
   ffmpeg = $state<{ installed: boolean; canInstall: boolean; job: Pull } | null>(null);
-  #ffTimer = 0;
 
   async loadFfmpeg() {
     try {
@@ -154,19 +204,33 @@ class Settings {
     const body = await res.json();
     if (!res.ok) { if (this.ffmpeg) this.ffmpeg = { ...this.ffmpeg, job: { state: 'error', message: body.message } }; return; }
     if (this.ffmpeg) this.ffmpeg = { ...this.ffmpeg, job: body };
-    window.clearInterval(this.#ffTimer);
-    this.#ffTimer = window.setInterval(async () => {
-      await this.loadFfmpeg();
-      if (this.ffmpeg?.job.state === 'running') return;
-      window.clearInterval(this.#ffTimer);
-    }, 2000);
+    this.watchFfmpeg();
   }
 
-  async cancelEnv() { await fetch('/engine/env/cancel', { method: 'POST' }); }
-  async cancelSepModel() { await fetch('/engine/models/separation/cancel', { method: 'POST' }); }
+  /** Corta una tarea. El motor contesta al toque; si no se puede (por ejemplo, ya está instalando), el motivo queda en `notice`. */
+  async #cancel(url: string, current: () => Pull | undefined, apply: (j: Pull) => void) {
+    const j = current();
+    if (j) apply({ ...j, cancelling: true, notice: undefined });
+    try {
+      const res = await fetch(url, { method: 'POST' });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        const now = current();
+        if (now) apply({ ...now, cancelling: false, notice: body.message ?? 'No se pudo cancelar.' });
+      }
+    } catch {
+      const now = current();
+      if (now) apply({ ...now, cancelling: false, notice: 'No pude hablar con el motor.' });
+    }
+  }
+
+  cancelEnv() { return this.#cancel('/engine/env/cancel', () => this.envPull, j => (this.envPull = j)); }
+  cancelSepModel() { return this.#cancel('/engine/models/separation/cancel', () => this.sepPull, j => (this.sepPull = j)); }
+  cancelFfmpeg() { return this.#cancel('/engine/ffmpeg/cancel', () => this.ffmpeg?.job, j => { if (this.ffmpeg) this.ffmpeg = { ...this.ffmpeg, job: j }; }); }
+  cancelLlmInstall() { return this.#cancel('/engine/llm/cancel', () => this.llm?.job, j => { if (this.llm) this.llm = { ...this.llm, job: j }; }); }
+  cancelPull(id: string) { return this.#cancel(`/engine/models/${encodeURIComponent(id)}/cancel`, () => this.pulls[id], j => (this.pulls[id] = j)); }
 
   llm = $state<LlmServer | null>(null);
-  #llmTimer = 0;
 
   async loadLlm() {
     try {
@@ -180,13 +244,62 @@ class Settings {
     const body = await res.json();
     if (!res.ok) { if (this.llm) this.llm = { ...this.llm, job: { state: 'error', message: body.message } }; return; }
     if (this.llm) this.llm = { ...this.llm, job: body };
-    window.clearInterval(this.#llmTimer);
-    this.#llmTimer = window.setInterval(async () => {
-      await this.loadLlm();
-      if (this.llm?.job.state === 'running') return;
-      window.clearInterval(this.#llmTimer);
-      await this.load();
-    }, 2000);
+    this.watchLlmInstall();
+  }
+
+  /** Servidores de modelos que el equipo ya tiene (Ollama, llama.cpp…), modelos .gguf y binarios. Solo mira: no instala ni prende nada. */
+  detected = $state<LlmDetect | null>(null);
+  detecting = $state(false);
+  detectError = $state('');
+
+  async detectLlm() {
+    this.detecting = true;
+    this.detectError = '';
+    try {
+      const res = await fetch('/engine/llm/detect');
+      if (res.ok) this.detected = await res.json();
+      else this.detectError = 'No se pudo buscar.';
+    } catch { this.detectError = 'No pude hablar con el motor.'; }
+    this.detecting = false;
+  }
+
+  /** Usa un servidor ya prendido para las recomendaciones (solo se llama tras la confirmación del usuario). */
+  async useServer(s: DetectedServer): Promise<boolean> {
+    const ok = await this.save({ llmUrl: s.url, llmProvider: s.kind === 'ollama' ? 'ollama' : 'llamacpp' });
+    await this.detectLlm();
+    return ok;
+  }
+
+  /** Prende llama-server con un modelo detectado y, cuando carga, lo deja en uso. Con confirmación previa. */
+  async startLlamaCpp(modelPath: string) {
+    this.detectError = '';
+    const res = await fetch('/engine/llm/llamacpp/start', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ model: modelPath }) });
+    const body = await res.json();
+    if (!res.ok) { this.detectError = body.message ?? 'No se pudo prender.'; return; }
+    await this.detectLlm();
+    this.#watch('llama', async () => {
+      await this.detectLlm();
+      return this.detected?.own.job.state === 'running';
+    }, 1500, async () => {
+      const own = this.detected?.own;
+      if (own?.running && own.port) {
+        const srv = this.detected?.servers.find(x => x.port === own.port);
+        if (srv) await this.useServer(srv);
+      }
+    });
+  }
+
+  /** Apaga el llama-server de la app. Si era el que estaba en uso, las recomendaciones vuelven a Ollama (un servidor apagado no responde). */
+  async stopLlamaCpp() {
+    const port = this.detected?.own.port;
+    const wasCurrent = !!this.detected?.servers.find(x => x.port === port && x.current);
+    await fetch('/engine/llm/llamacpp/stop', { method: 'POST' });
+    await this.detectLlm();
+    if (wasCurrent) {
+      const ollama = this.detected?.servers.find(x => x.kind === 'ollama');
+      await this.save({ llmProvider: 'ollama', llmUrl: ollama?.url ?? 'http://127.0.0.1:11500' });
+      await this.detectLlm();
+    }
   }
 
   backends = $state<BackendReport | null>(null);
@@ -201,48 +314,37 @@ class Settings {
   }
 
   async installEnv() {
-    this.envPull = { state: 'running', percent: 0 };
+    this.envPull = { state: 'running', percent: 0, step: 'Preparando' };
     const res = await fetch('/engine/env/install', { method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(this.backend ? { backend: this.backend } : {}) });
     const body = await res.json();
     if (!res.ok) { this.envPull = { state: 'error', message: body.message }; return; }
-    window.clearInterval(this.#envTimer);
-    this.#envTimer = window.setInterval(async () => {
-      this.envPull = await (await fetch('/engine/env/status')).json();
-      if (this.envPull.state === 'running') return;
-      window.clearInterval(this.#envTimer);
-      await this.load();
-    }, 2000);
+    this.envPull = body;
+    this.watchEnv();
   }
 
   async pullSeparation() {
-    this.sepPull = { state: 'running', percent: 0 };
+    this.sepPull = { state: 'running', percent: 0, step: 'Preparando' };
     const res = await fetch('/engine/models/separation/download', { method: 'POST' });
     const body = await res.json();
     if (!res.ok) { this.sepPull = { state: 'error', message: body.message }; return; }
-    window.clearInterval(this.#sepTimer);
-    this.#sepTimer = window.setInterval(async () => {
-      this.sepPull = await (await fetch('/engine/models/separation/status')).json();
-      if (this.sepPull.state === 'running') return;
-      window.clearInterval(this.#sepTimer);
-      await this.load();
-    }, 1500);
+    this.sepPull = body;
+    this.watchSep();
   }
 
   async pull(id: string) {
     this.error = '';
-    this.pulls[id] = { state: 'running', percent: 0 };
+    this.pulls[id] = { state: 'running', percent: 0, step: 'Preparando' };
     const res = await fetch(`/engine/models/${encodeURIComponent(id)}/pull`, { method: 'POST' });
     const body = await res.json();
     if (!res.ok) { this.pulls[id] = { state: 'error', message: body.message }; return; }
-    window.clearInterval(this.#timer);
-    this.#timer = window.setInterval(async () => {
-      const st: Pull = await (await fetch(`/engine/models/${encodeURIComponent(id)}/status`)).json();
-      this.pulls[id] = st;
-      if (st.state === 'running') return;
-      window.clearInterval(this.#timer);
-      await this.load();
-    }, 1500);
+    this.pulls[id] = body;
+    this.watchPull(id);
+  }
+
+  /** Nombre de la descarga de modelo que está en curso, si hay una (el motor hace de a una). */
+  get pullingNow(): string | null {
+    return Object.entries(this.pulls).find(([, p]) => p.state === 'running')?.[0] ?? null;
   }
 }
 

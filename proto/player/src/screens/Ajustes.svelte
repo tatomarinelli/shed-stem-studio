@@ -4,6 +4,8 @@
   import { tidal } from '../lib/tidal.svelte';
   import FolderPicker from '../components/FolderPicker.svelte';
   import Progress from '../components/Progress.svelte';
+  import JobNote from '../components/JobNote.svelte';
+  import LlmDetect from '../components/LlmDetect.svelte';
   import BackendPicker from '../components/BackendPicker.svelte';
   import LlmServer from '../components/LlmServer.svelte';
   import { setup } from '../lib/setup.svelte';
@@ -12,7 +14,7 @@
 
   let resOpen = $state(true); // "Recursos" arranca abierto; cerrado, no se sondea
   onMount(() => {
-    void settings.load();
+    void settings.load().then(() => settings.syncJobs());
     settings.watchServices(true);
     return () => settings.watchServices(false);
   });
@@ -133,7 +135,7 @@
             {:else}
               <BackendPicker />
               <button class="primary" onclick={() => settings.installEnv()}>Instalar</button>
-              {#if settings.envPull.state === 'error'}<span class="warn" role="alert">{settings.envPull.message}</span>{/if}
+              <JobNote job={settings.envPull} />
             {/if}
           </div>
         </div>
@@ -149,7 +151,7 @@
                   <Progress job={settings.sepPull} oncancel={() => settings.cancelSepModel()} />
                 {:else}
                   <button class="primary" onclick={() => settings.pullSeparation()}>Descargar</button>
-                  {#if settings.sepPull.state === 'error'}<span class="warn" role="alert">{settings.sepPull.message}</span>{/if}
+                  <JobNote job={settings.sepPull} />
                 {/if}
               </div>
             {:else if !m.present}<span class="warn">Falta instalar</span>
@@ -162,6 +164,7 @@
 
     <div class="module">
       <h4>Recomendaciones</h4>
+      <LlmDetect />
       <LlmServer />
       <ul class="models">
         {#each st.recommendations.models as m (m.label)}
@@ -178,10 +181,11 @@
             <div><b>{c.label}</b> <span class="muted">{c.gb ? `${c.gb} GB` : ''}</span> <span class="reco">Recomendado</span></div>
             <div class="act">
               {#if pull?.state === 'running'}
-                <Progress job={pull} />
+                <Progress job={pull} oncancel={() => settings.cancelPull(c.id)} />
               {:else}
-                <button class="primary" onclick={() => settings.pull(c.id)}>Descargar</button>
-                {#if pull?.state === 'error'}<span class="warn" role="alert">{pull.message}</span>{/if}
+                <button class="primary" disabled={!!settings.pullingNow} onclick={() => settings.pull(c.id)}>Descargar</button>
+                {#if settings.pullingNow}<span class="muted">Esperá a que termine {settings.pullingNow}.</span>{/if}
+                <JobNote job={pull} />
               {/if}
             </div>
           </li>
@@ -192,11 +196,12 @@
               <input bind:value={customModel} placeholder="nombre:etiqueta" autocomplete="off" spellcheck="false" />
             </label>
             {#if customModel.trim() && settings.pulls[customModel.trim()]?.state === 'running'}
-              <Progress job={settings.pulls[customModel.trim()]} />
+              <Progress job={settings.pulls[customModel.trim()]} oncancel={() => settings.cancelPull(customModel.trim())} />
             {:else}
-              <button type="submit" disabled={!customModel.trim()}>Descargar</button>
+              <button type="submit" disabled={!customModel.trim() || !!settings.pullingNow}>Descargar</button>
+              {#if settings.pullingNow}<span class="muted">Esperá a que termine {settings.pullingNow}.</span>{/if}
             {/if}
-            {#if customModel.trim() && settings.pulls[customModel.trim()]?.state === 'error'}<span class="warn" role="alert">{settings.pulls[customModel.trim()].message}</span>{/if}
+            {#if customModel.trim()}<JobNote job={settings.pulls[customModel.trim()]} />{/if}
           </form>
         </li>
         {#if !st.recommendations.models.length && !toInstall.length}

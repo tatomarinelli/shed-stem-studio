@@ -17,6 +17,7 @@ from pathlib import Path
 
 import backends
 import hardware
+import jobs
 import stems
 
 REQ = Path(__file__).with_name("requirements-env.txt")  # por defecto; start() elige el del motor (backends.py)
@@ -103,15 +104,15 @@ def _install_uv(uv, env, req, backend):
             if now - last_t >= 2:
                 _job["rate"] = max(0, int((done - last_b) / (now - last_t)))
                 last_t, last_b = now, done
-            _job.update(done=int(done), total=int(approx), approx=True, percent=min(97, int(100 * done / approx)))
+            jobs.update(_job, done=int(done), total=int(approx), approx=True, percent=min(97, int(100 * done / approx)))
 
     threading.Thread(target=watch, daemon=True).start()
     try:
-        _job.update(step=f"Descargando Python {PY_VERSION}")
+        jobs.update(_job, step=f"Descargando Python {PY_VERSION}")
         code, tail = _run([uv, "venv", str(venv), "--python", PY_VERSION, "--python-preference", "only-managed", "--no-progress"], uv_env)
         if code != 0:
             raise EnvError("No se pudo crear el entorno: " + (tail[-1] if tail else "sin salida")[:200])
-        _job.update(step="Descargando e instalando los paquetes")
+        jobs.update(_job, step="Descargando e instalando los paquetes")
         py = str(osenv.env_bin(env, "python"))
         code, tail = _run([uv, "pip", "install", "--python", py, "--no-deps", "--index-strategy", "unsafe-best-match", "--no-progress", "-r", str(req)], uv_env)
         if code != 0 or not present():
@@ -141,7 +142,7 @@ def _install_pip(env, req):
         if m and not m.group(1).endswith(".metadata"):
             finished += current  # el archivo anterior terminó
             name, current = m.group(1), 0
-            _job.update(step="Descargando " + name.rsplit("/", 1)[-1][:60])
+            jobs.update(_job, step="Descargando " + name.rsplit("/", 1)[-1][:60])
             continue
         m = RAW.match(line)
         if m:
@@ -151,9 +152,9 @@ def _install_pip(env, req):
             if now - last_t >= 1:
                 _job["rate"] = int((done - last_b) / (now - last_t))
                 last_t, last_b = now, done
-            _job.update(done=int(done), total=int(APPROX_TOTAL), approx=True, percent=min(97, int(100 * done / APPROX_TOTAL)))
+            jobs.update(_job, done=int(done), total=int(APPROX_TOTAL), approx=True, percent=min(97, int(100 * done / APPROX_TOTAL)))
         elif line.startswith("Installing collected packages"):
-            _job.update(step="Instalando los paquetes", percent=98)
+            jobs.update(_job, step="Instalando los paquetes", percent=98)
     proc.wait()
     if _holder.get("cancelled"):
         raise Cancelled()
@@ -175,7 +176,7 @@ def start(backend=None):
             raise EnvError("Ya se está instalando.")
         if present():
             raise EnvError("El entorno ya está instalado.")
-        _job.update(state="running", percent=0, message="", step="Creando el entorno", done=0, total=0, rate=0, approx=False)
+        jobs.start(_job, state="running", percent=0, message="", step="Creando el entorno", done=0, total=0, rate=0, approx=False)
         _holder.clear()
 
     def work():
@@ -188,14 +189,14 @@ def start(backend=None):
             else:
                 _install_pip(env, req)
             (env / MARKER).write_text(backend, encoding="utf-8")
-            _job.update(state="done", percent=100, step="Listo")
+            jobs.update(_job, state="done", percent=100, step="Listo")
         except Cancelled:
             # lo parcial no sirve y ocupa disco: se borra (el entorno todavía no era usable: `present()` era falso al empezar)
             for sub in ("venv", "uv-cache", "python"):
                 shutil.rmtree(env / sub, ignore_errors=True)
-            _job.update(state="cancelled", percent=0, message="Cancelado", step="")
+            jobs.update(_job, state="cancelled", percent=0, message="Cancelado", step="")
         except Exception as e:
-            _job.update(state="error", message=str(e) if isinstance(e, EnvError) else f"Falló: {type(e).__name__}")
+            jobs.update(_job, state="error", message=str(e) if isinstance(e, EnvError) else f"Falló: {type(e).__name__}")
 
     threading.Thread(target=work, daemon=True).start()
     return dict(_job)
@@ -205,5 +206,6 @@ def cancel():
     if _job["state"] != "running":
         raise EnvError("No hay una instalación en curso.")
     _holder["cancelled"] = True
+    _job["cancelling"] = True
     osenv.kill_tree(_holder.get("proc"))
     return {"state": "cancelling"}
