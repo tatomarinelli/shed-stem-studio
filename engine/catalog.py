@@ -12,17 +12,21 @@ import time
 import unicodedata
 import urllib.parse
 import urllib.request
+from datetime import datetime
 from pathlib import Path
 
 import library
 import recs
 import settings
+import providers
 import tidal_source
 
 _lock = threading.Lock()
 _version = 0
 _cache = {"v": -1, "data": None}
 _tidal = {"fetchedAt": None, "refreshing": False, "error": "", "albums": [], "tracks": []}
+_ext = {}  # proveedor (spotify, ytmusic) -> {fetchedAt, refreshing, error, albums, tracks}
+EXT_IDS = ("spotify", "ytmusic")
 _genres = {}  # clave de disco -> {"genres": [...], "at": ts}
 _genre_job = {"running": False, "done": 0, "total": 0}
 _pause = threading.Event()   # mientras está activo, el enriquecimiento de géneros cede MusicBrainz a una recomendación
@@ -61,6 +65,12 @@ def load_state():
         _tidal.update(fetchedAt=snap.get("fetchedAt"), albums=snap.get("albums", []), tracks=snap.get("tracks", []))
     except (OSError, ValueError):
         pass
+    for pid in EXT_IDS:
+        try:
+            snap = json.loads((_dir() / f"{pid}.json").read_text())
+            _ext_state(pid).update(fetchedAt=snap.get("fetchedAt"), albums=snap.get("albums", []), tracks=snap.get("tracks", []))
+        except (OSError, ValueError):
+            pass
     try:
         _genres.update(json.loads((_dir() / "genres.json").read_text()))
     except (OSError, ValueError):
@@ -111,6 +121,60 @@ def refresh_tidal():
             _tidal["refreshing"] = False
 
     threading.Thread(target=work, daemon=True).start()
+
+
+def _ext_state(pid):
+    return _ext.setdefault(pid, {"fetchedAt": None, "refreshing": False, "error": "", "albums": [], "tracks": []})
+
+
+def refresh_providers():
+    """Trae la biblioteca de las cuentas conectadas (Spotify, YouTube Music). Solo lectura; una cuenta que falla no frena a las demás."""
+    for pid in EXT_IDS:
+        try:
+            p = providers.get(pid)
+            ready = p.configured() and p.connected()
+        except providers.ProviderError:
+            continue
+        if not ready:
+            st = _ext_state(pid)
+            if st["albums"] or st["tracks"]:  # se desconectó: lo guardado de esa cuenta deja de mostrarse
+                st.update(albums=[], tracks=[], fetchedAt=None, error="")
+                _save(f"{pid}.json", {"fetchedAt": None, "albums": [], "tracks": []})
+                _bump()
+            continue
+        with _lock:
+            st = _ext_state(pid)
+            if st["refreshing"]:
+                continue
+            st.update(refreshing=True, error="")
+        threading.Thread(target=_refresh_one, args=(pid, p), daemon=True).start()
+
+
+def _refresh_one(pid, p):
+    st = _ext_state(pid)
+    try:
+        lib = p.library()
+        st.update(albums=lib.get("albums", []), tracks=lib.get("tracks", []), fetchedAt=time.time())
+        _save(f"{pid}.json", {"fetchedAt": st["fetchedAt"], "albums": st["albums"], "tracks": st["tracks"]})
+        _bump()
+        enrich_genres()
+    except providers.ProviderError as e:
+        st["error"] = e.message
+    except Exception as e:
+        st["error"] = f"No pude leer {p.label} ({type(e).__name__})."
+    finally:
+        st["refreshing"] = False
+
+
+def forget_provider(pid):
+    """Al desconectar una cuenta se borra su copia local."""
+    st = _ext_state(pid)
+    st.update(albums=[], tracks=[], fetchedAt=None, error="")
+    try:
+        (_dir() / f"{pid}.json").unlink()
+    except OSError:
+        pass
+    _bump()
 
 
 # ---------------------------------------------------------------- géneros
@@ -191,6 +255,18 @@ def _albums_raw():
         a["tidalId"] = t["id"]
         a["savedAt"], a["rank"] = t.get("savedAt"), rank
         a["year"] = a["year"] or t.get("year")
+    for pid in EXT_IDS:
+        for rank, t in enumerate(_ext_state(pid)["albums"]):
+            k = album_key(t["artist"], t["title"])
+            a = albums.setdefault(k, {"key": k, "title": t["title"], "artist": t["artist"], "year": t.get("year"), "genres": [],
+                                      "sources": [], "localIds": [], "tidalId": None})
+            if pid not in a["sources"]:
+                a["sources"].append(pid)
+            a.setdefault("extIds", {})[pid] = t["id"]
+            if t.get("addedAt") and not a.get("savedAt"):
+                a["savedAt"] = t["addedAt"]
+            a.setdefault("rank", rank)
+            a["year"] = a["year"] or t.get("year")
     for k, a in albums.items():
         a["genres"] = a["genres"] or (_genres.get(k) or {}).get("genres", [])
     return list(albums.values())
@@ -215,9 +291,21 @@ def _tracks_raw():
         for c in t.get("collections", []):
             if c not in x["collections"]:
                 x["collections"].append(c)
+    for pid in EXT_IDS:
+        for rank, t in enumerate(_ext_state(pid)["tracks"]):
+            k = f"{norm(t['artist'])}|{norm(t['title'])}"
+            x = tracks.setdefault(k, {"key": k, "title": t["title"], "artist": t["artist"], "album": t.get("album", ""), "duration": t.get("duration"),
+                                      "genres": [], "sources": [], "ids": {}, "collections": []})
+            if "rank" not in x:
+                x["savedAt"], x["rank"] = t.get("addedAt"), rank
+            if pid not in x["sources"]:
+                x["sources"].append(pid)
+            x["ids"][pid] = t["id"]
     for x in tracks.values():
         x["genres"] = x["genres"] or (_genres.get(album_key(x["artist"], x["album"])) or {}).get("genres", [])
-        x["artUrl"] = f"/engine/art/{x['ids'].get('local') or x['ids'].get('tidal')}"
+        base = x["ids"].get("local") or x["ids"].get("tidal")
+        if base:  # sin archivo local ni TIDAL no hay portada: la interfaz dibuja la inicial
+            x["artUrl"] = f"/engine/art/{base}"
     return list(tracks.values())
 
 
@@ -235,15 +323,33 @@ def snapshot():
 SORTS = ("saved", "alpha", "artist")
 
 
+def _ts(v):
+    """Fecha de guardado como número (para comparar fuentes con formatos distintos); None si no hay o no se entiende."""
+    if not v:
+        return None
+    try:
+        return datetime.fromisoformat(str(v).replace("Z", "+00:00")).timestamp()
+    except ValueError:
+        return None
+
+
 def sort_items(hits, sort):
-    """saved: lo último que guardaste en TIDAL primero (después lo que solo está en tus archivos);
-    alpha: por título; artist: por artista y título."""
+    """saved: lo último que guardaste primero, mezclando fuentes por fecha (lo que no trae fecha sigue el orden de su
+    fuente y después lo que solo está en tus archivos); alpha: por título; artist: por artista y título."""
     title = lambda i: norm(i["title"])
     if sort == "alpha":
         return sorted(hits, key=lambda i: (title(i), norm(i["artist"])))
     if sort == "artist":
         return sorted(hits, key=lambda i: (norm(i["artist"]), title(i)))
-    return sorted(hits, key=lambda i: (0, i["rank"], "") if "rank" in i else (1, norm(i["artist"]), title(i)))
+
+    def key(i):
+        ts = _ts(i.get("savedAt"))
+        if ts is not None:
+            return (0, -ts, 0, "")
+        if "rank" in i:
+            return (1, 0, i["rank"], "")
+        return (2, 0, 0, norm(i["artist"]) + "|" + title(i))
+    return sorted(hits, key=key)
 
 
 def query(kind="albums", q="", source="", artist="", genre="", limit=60, offset=0, sort="saved"):
@@ -268,7 +374,7 @@ def query(kind="albums", q="", source="", artist="", genre="", limit=60, offset=
     count = lambda field, ignore: _count([i for i in items if match(i, (ignore,))], field)
     return {"total": len(hits), "items": hits[offset:offset + limit],
             "facets": {"artists": count("artist", "artist")[:300], "genres": count("genres", "genre")[:60],
-                       "sources": {s: sum(1 for i in items if s in i["sources"]) for s in ("local", "tidal")}},
+                       "sources": {s: sum(1 for i in items if s in i["sources"]) for s in ("local", "tidal", *EXT_IDS)}},
             "status": status()}
 
 
@@ -284,6 +390,8 @@ def _count(items, field):
 def status():
     return {"tidal": {"fetchedAt": _tidal["fetchedAt"], "refreshing": _tidal["refreshing"], "error": _tidal["error"],
                       "albums": len(_tidal["albums"]), "tracks": len(_tidal["tracks"])},
+            "providers": {pid: {"fetchedAt": st["fetchedAt"], "refreshing": st["refreshing"], "error": st["error"],
+                                "albums": len(st["albums"]), "tracks": len(st["tracks"])} for pid, st in ((p, _ext_state(p)) for p in EXT_IDS)},
             "local": {k: library.report()[k] for k in ("scanning", "scanned", "total")},
             "genres": dict(_genre_job)}
 
@@ -305,4 +413,9 @@ def album_detail(key):
                 x["ids"]["tidal"] = t["id"]
         except Exception:
             pass
+    for pid in EXT_IDS:  # los temas guardados de esa cuenta que son de este disco (la cuenta no entrega el disco entero)
+        for i, t in enumerate(_ext_state(pid)["tracks"]):
+            if album_key(t["artist"], t.get("album", "")) == key:
+                x = tracks.setdefault(norm(t["title"]), {"title": t["title"], "artist": t["artist"], "album": a["title"], "duration": t.get("duration"), "ids": {}, "order": f"~{i:03d}"})
+                x["ids"][pid] = t["id"]
     return {"album": a, "tracks": sorted(tracks.values(), key=lambda t: t["order"])}

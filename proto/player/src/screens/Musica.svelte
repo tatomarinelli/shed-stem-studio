@@ -10,16 +10,17 @@
   import TrackRow from '../components/TrackRow.svelte';
   import { playback, queueItem } from '../lib/playback.svelte';
 
-  interface Ids { local?: string; tidal?: string }
-  interface Album { key: string; title: string; artist: string; year: number | null; genres: string[]; sources: string[]; localIds: string[]; tidalId: string | null; artUrl: string }
-  interface Track { key: string; title: string; artist: string; album: string; duration: number; genres: string[]; sources: string[]; ids: Ids; artUrl: string }
-  interface Facets { artists: { name: string; count: number }[]; genres: { name: string; count: number }[]; sources: { local: number; tidal: number } }
+  interface Ids { local?: string; tidal?: string; spotify?: string; ytmusic?: string }
+  interface Album { key: string; title: string; artist: string; year: number | null; genres: string[]; sources: string[]; localIds: string[]; tidalId: string | null; artUrl?: string }
+  interface Track { key: string; title: string; artist: string; album: string; duration: number; genres: string[]; sources: string[]; ids: Ids; artUrl?: string }
+  interface Facets { artists: { name: string; count: number }[]; genres: { name: string; count: number }[]; sources: Record<string, number> }
 
   const LIMIT = 60;
-  const SRC: Record<string, string> = { local: 'Mis archivos', tidal: 'TIDAL' };
+  const SRC: Record<string, string> = { local: 'Mis archivos', tidal: 'TIDAL', spotify: 'Spotify', ytmusic: 'YouTube Music' };
+  const SRC_ORDER = ['local', 'tidal', 'spotify', 'ytmusic'];
 
   let kind = $state<'albums' | 'tracks'>('albums');
-  let source = $state<'' | 'local' | 'tidal'>('');
+  let source = $state('');
   let artist = $state('');
   let genre = $state('');
   let sort = $state<'saved' | 'alpha' | 'artist'>('saved');
@@ -27,7 +28,7 @@
   let debounced = $state('');
   let items = $state<(Album | Track)[]>([]);
   let total = $state(0);
-  let facets = $state<Facets>({ artists: [], genres: [], sources: { local: 0, tidal: 0 } });
+  let facets = $state<Facets>({ artists: [], genres: [], sources: {} });
   let loading = $state(true);
   let more = $state(false);
   let failed = $state(false);
@@ -75,13 +76,14 @@
   // Cualquier cambio de filtro, búsqueda, vista o catálogo vuelve a pedir desde el principio.
   $effect(() => { kind; source; artist; genre; sort; debounced; music.version; untrack(() => load(true)); });
   $effect(() => { untrack(() => { library.load(); }); });
-  // Al entrar, si lo de TIDAL tiene más de 10 minutos, se vuelve a leer solo (un álbum recién guardado aparece sin tocar nada).
+  // Al entrar, si lo de TIDAL, Spotify o YouTube Music tiene más de 10 minutos, se vuelve a leer solo (un álbum recién guardado aparece sin tocar nada).
   let autoChecked = false;
   $effect(() => {
     const s = music.status;
-    if (autoChecked || !s || !music.sources.tidal) return;
+    if (autoChecked || !s || !SRC_ORDER.some(x => x !== 'local' && music.sources[x])) return;
     autoChecked = true;
-    if (!s.tidal.refreshing && (!s.tidal.fetchedAt || Date.now() / 1000 - s.tidal.fetchedAt > 600)) untrack(() => music.refresh());
+    const stale = (j?: { refreshing: boolean; fetchedAt: number | null }) => !!j && !j.refreshing && (!j.fetchedAt || Date.now() / 1000 - j.fetchedAt > 600);
+    if (stale(s.tidal) || Object.values(s.providers ?? {}).some(stale)) untrack(() => music.refresh());
   });
 
   $effect(() => {
@@ -110,7 +112,7 @@
   $effect(() => { kind; source; artist; genre; sort; debounced; untrack(() => (openAlbum = null)); });
 
   const filtered = $derived(!!(debounced || source || artist || genre));
-  const noSources = $derived(!loading && !failed && !filtered && facets.sources.local === 0 && facets.sources.tidal === 0 && !music.working);
+  const noSources = $derived(!loading && !failed && !filtered && !SRC_ORDER.some(x => facets.sources[x]) && !music.working);
   const st = $derived(music.status);
   const busy = $derived(music.working);
   const mm = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
@@ -148,16 +150,17 @@
 {#if noSources}
   <section class="empty">
     <b>Todavía no hay música</b>
-    <p class="muted">Agregá una carpeta o conectá TIDAL.</p>
+    <p class="muted">Agregá una carpeta o conectá TIDAL, Spotify o YouTube Music.</p>
     <a class="btn" href="#/fuentes">Ir a Fuentes</a>
   </section>
 {:else}
   <div class="bar">
     <input type="search" placeholder="Buscar artista, disco o tema" bind:value={query} aria-label="Buscar en tu música" />
     <div class="seg" role="group" aria-label="Fuente">
-      <button class:on={source === ''} onclick={() => (source = '')}>Todas <span class="num">{facets.sources.local + facets.sources.tidal}</span></button>
-      <button class:on={source === 'local'} onclick={() => (source = 'local')}>Mis archivos <span class="num">{facets.sources.local}</span></button>
-      <button class:on={source === 'tidal'} onclick={() => (source = 'tidal')}>TIDAL <span class="num">{facets.sources.tidal}</span></button>
+      <button class:on={source === ''} onclick={() => (source = '')}>Todas</button>
+      {#each SRC_ORDER.filter(s => facets.sources[s] || source === s) as s (s)}
+        <button class:on={source === s} onclick={() => (source = s)}>{SRC[s]} <span class="num">{facets.sources[s] ?? 0}</span></button>
+      {/each}
     </div>
     <Combo label="Artista" items={facets.artists} bind:value={artist} />
     <Combo label="Género" items={facets.genres} bind:value={genre} />

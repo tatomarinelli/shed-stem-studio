@@ -99,6 +99,8 @@ class Handler(BaseHTTPRequestHandler):
         """Rutas /engine/providers... (GET). Devuelve True si respondió."""
         if path == "/engine/oauth/callback":
             ok, message = providers.handle_callback(query)
+            if ok:
+                catalog.refresh_providers()  # recién conectada: trae la biblioteca sin esperar a que el usuario la pida
             self._html(200 if ok else 400, providers.callback_page(ok, message))
             return True
         if path == "/engine/providers":
@@ -128,6 +130,7 @@ class Handler(BaseHTTPRequestHandler):
             self._send(200, p.auth_start(self._port()))
         else:
             p.logout()
+            catalog.forget_provider(p.id)
             self._send(200, p.status(self._port()))
         return True
 
@@ -487,6 +490,7 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/engine/music/refresh":
                 library.scan()
                 catalog.refresh_tidal()
+                catalog.refresh_providers()
                 catalog.enrich_genres()
                 return self._send(200, {"ok": True})
             if path == "/engine/settings":

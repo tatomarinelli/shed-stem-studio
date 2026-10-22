@@ -5,13 +5,15 @@
   import { settings } from '../lib/settings.svelte';
   import { music } from '../lib/music.svelte';
   import { toast } from '../lib/toast.svelte';
+  import { providers } from '../lib/providers.svelte';
+  import ProviderWizard from '../components/ProviderWizard.svelte';
   import TidalLogin from '../components/TidalLogin.svelte';
   import FolderPicker from '../components/FolderPicker.svelte';
 
   let picking = $state(false);
 
   // untrack: connect() lee y escribe tidal.state; sin esto el efecto se reejecuta con cada cambio de estado.
-  $effect(() => untrack(() => { library.load(); settings.load(); music.loadStatus(); tidal.connect(); }));
+  $effect(() => untrack(() => { library.load(); settings.load(); music.loadStatus(); tidal.connect(); providers.load(); }));
 
   const folders = $derived(settings.effective?.musicFolders ?? library.folders);
   const scanning = $derived(library.scanning || !!music.status?.local.scanning);
@@ -84,6 +86,8 @@
       </footer>
     {/if}
   </section>
+
+  {#each providers.accounts as p (p.id)}<ProviderWizard {p} />{/each}
 </div>
 
 <p class="muted foot">Tu música aparece en <a href="#/musica">Música</a>.</p>

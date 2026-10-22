@@ -1,13 +1,14 @@
 // Estado de la música unificada (todas las fuentes): lo muestran Fuentes (conexiones) y Música (catálogo).
 export interface MusicStatus {
   tidal: { fetchedAt: number; refreshing: boolean; error: string; albums: number; tracks: number };
+  providers?: Record<string, { fetchedAt: number | null; refreshing: boolean; error: string; albums: number; tracks: number }>;
   local: { scanning: boolean; scanned: number; total: number };
   genres: { running: boolean; done: number; total: number };
 }
 
 class MusicStore {
   status = $state<MusicStatus | null>(null);
-  sources = $state({ local: 0, tidal: 0 });
+  sources = $state<Record<string, number>>({ local: 0, tidal: 0, spotify: 0, ytmusic: 0 });
   /** Se incrementa cada vez que el catálogo cambió (para que Música vuelva a pedir). */
   version = $state(0);
   #timer = 0;
@@ -15,7 +16,7 @@ class MusicStore {
 
   get working() {
     const s = this.status;
-    return !!s && (s.tidal.refreshing || s.local.scanning || s.genres.running);
+    return !!s && (s.tidal.refreshing || Object.values(s.providers ?? {}).some(p => p.refreshing) || s.local.scanning || s.genres.running);
   }
 
   async loadStatus() {
