@@ -70,3 +70,4 @@ Todo lo verificado en Windows real (2026-10-21, notebook AMD). **Pendiente re-co
 - **Release de Windows** (zip 28,8 MB e instalador 21,9 MB): prueba de punta a punta aislada, ventana WebView2 y instalar/desinstalar verificados; detalle y lo que falta en `docs/estado-windows.md`.
 - Modo desarrollo en caliente: `python windows/dev.py` (ver `windows/README.md`).
 - Sin correr todavía: la ventana (WebView2: audio, AudioWorklet, aislamiento), el instalador, `serve-check.py` con `webview-check.html` (abre Edge y una ventana WebView2, hay que avisar), `services.open_folder`, entorno de separación, cáscara, instalador, CI.
+- **Proveedores Spotify/YouTube Music** (`osenv.write_protected`, `providers.py`): DPAPI y el llavero de Linux verificados solo con simulaciones (más el llavero real en Linux). Pendiente en Windows real: cifrado de tokens, flujo OAuth y apertura del navegador. Ver `docs/fuentes-spotify-youtube.md`.

@@ -300,13 +300,96 @@ def protect_file(path):
     p.write_bytes(_DPAPI_MAGIC + _dpapi(raw, True))
 
 
+_KEYRING_MAGIC = b"STEMSHED-KEYRING1\n"
+KEYRING_SERVICE = "shed-stem-studio"
+
+
+def _run_secret_tool(args, data=None):
+    """Llama a `secret-tool` (libsecret: GNOME Keyring, KWallet con su puente). Separado para poder simularlo en las pruebas."""
+    import subprocess
+    return subprocess.run(["secret-tool", *args], input=data, capture_output=True, timeout=15)
+
+
+def keyring_available():
+    """Linux: ¿hay `secret-tool` y un servicio de claves respondiendo? (en un servidor sin sesión gráfica no)."""
+    import shutil
+    if WINDOWS or not shutil.which("secret-tool"):
+        return False
+    try:
+        return _run_secret_tool(["lookup", "service", KEYRING_SERVICE, "account", "__probe__"]).returncode in (0, 1)
+    except Exception:
+        return False
+
+
+def _account(path):
+    return Path(path).name
+
+
+def write_protected(path, data):
+    """Guarda `data` (bytes) sin dejar texto plano en disco: se cifra en memoria y se escribe a un temporal que reemplaza al
+    archivo. Devuelve cómo quedó: `dpapi` (Windows, cifrado con la cuenta del usuario), `keyring` (Linux: el secreto está en el
+    llavero del sistema y el archivo solo guarda una marca) o `file-600` (Linux sin llavero: texto plano con permisos 600,
+    la mejor opción disponible; la interfaz lo avisa)."""
+    p = Path(path)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    how = "dpapi" if WINDOWS else "file-600"
+    if WINDOWS:
+        payload = _DPAPI_MAGIC + _dpapi(data, True)
+    elif keyring_available():
+        r = _run_secret_tool(["store", f"--label=Shed Stem Studio ({_account(p)})", "service", KEYRING_SERVICE, "account", _account(p)], data)
+        if r.returncode == 0:
+            how, payload = "keyring", _KEYRING_MAGIC
+        else:
+            payload = data
+    else:
+        payload = data
+    tmp = p.with_name(p.name + ".tmp")
+    if WINDOWS:
+        tmp.write_bytes(payload)
+    else:
+        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)  # nace con 600: nunca legible por otros
+        with os.fdopen(fd, "wb") as f:
+            f.write(payload)
+    os.replace(tmp, p)
+    return how
+
+
+def protection_of(path):
+    """Cómo está guardado el archivo hoy: dpapi, keyring, file-600 o None si no existe."""
+    try:
+        head = Path(path).read_bytes()[:32]
+    except OSError:
+        return None
+    if head.startswith(_DPAPI_MAGIC):
+        return "dpapi"
+    return "keyring" if head.startswith(_KEYRING_MAGIC) else "file-600"
+
+
+def delete_protected(path):
+    """Borra el archivo y, si el secreto estaba en el llavero, también esa entrada. Solo toca datos locales."""
+    p = Path(path)
+    if protection_of(p) == "keyring":
+        try:
+            _run_secret_tool(["clear", "service", KEYRING_SERVICE, "account", _account(p)])
+        except Exception:
+            pass
+    p.unlink(missing_ok=True)
+
+
 def read_protected(path):
-    """Contenido del archivo; si está cifrado con DPAPI lo descifra. Un archivo en claro se lee tal cual."""
+    """Contenido del archivo; si está cifrado con DPAPI o guardado en el llavero lo recupera. Un archivo en claro se lee tal cual."""
     raw = Path(path).read_bytes()
     if raw.startswith(_DPAPI_MAGIC):
         if not WINDOWS:
             raise OSError("Archivo cifrado con DPAPI: solo se abre en Windows.")
         return _dpapi(raw[len(_DPAPI_MAGIC):], False)
+    if raw.startswith(_KEYRING_MAGIC):
+        if WINDOWS:
+            raise OSError("Archivo guardado en el llavero de Linux: no se abre en Windows.")
+        r = _run_secret_tool(["lookup", "service", KEYRING_SERVICE, "account", _account(path)])
+        if r.returncode != 0 or not r.stdout:
+            raise OSError("No se pudo leer el llavero del sistema.")
+        return r.stdout
     return raw
 
 

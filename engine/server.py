@@ -6,6 +6,7 @@ Todo lo que viene de afuera (ruta, parámetros, cabeceras) se trata como dato.
 import json
 import os
 import osenv
+import providers
 import re
 import ssl
 import sys
@@ -77,6 +78,55 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header("Access-Control-Allow-Origin", origin)
         self.end_headers()
         self.wfile.write(body)
+
+    def _html(self, code, body):
+        self.send_response(code)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("Referrer-Policy", "no-referrer")
+        self.send_header("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'")
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _port(self):
+        return services._server["port"] or 8770
+
+    def _providers_get(self, path, query):
+        """Rutas /engine/providers... (GET). Devuelve True si respondió."""
+        if path == "/engine/oauth/callback":
+            ok, message = providers.handle_callback(query)
+            self._html(200 if ok else 400, providers.callback_page(ok, message))
+            return True
+        if path == "/engine/providers":
+            self._send(200, {"providers": [p.status(self._port()) for p in providers.all_providers()]})
+            return True
+        m = re.fullmatch(r"/engine/providers/(spotify|ytmusic|tidal)/library", path)
+        if m:
+            self._send(200, providers.get(m.group(1)).library())
+            return True
+        m = re.fullmatch(r"/engine/providers/(spotify|ytmusic|tidal)/playlists/([A-Za-z0-9_-]{1,64})", path)
+        if m:
+            self._send(200, providers.get(m.group(1)).playlist_tracks(m.group(2)))
+            return True
+        return False
+
+    def _providers_post(self, path):
+        m = re.fullmatch(r"/engine/providers/(spotify|ytmusic)/(app|auth/start|logout)", path)
+        if not m:
+            return False
+        p, action = providers.get(m.group(1)), m.group(2)
+        if action == "app":
+            size = int(self.headers.get("Content-Length", 0))
+            body = json.loads(self.rfile.read(size) or b"{}") if 0 < size <= 2048 else {}
+            p.set_app(body.get("clientId", ""), body.get("clientSecret", ""))
+            self._send(200, p.status(self._port()))
+        elif action == "auth/start":
+            self._send(200, p.auth_start(self._port()))
+        else:
+            p.logout()
+            self._send(200, p.status(self._port()))
+        return True
 
     def _static(self, path):
         """La interfaz construida, si hay una. True si respondió."""
@@ -172,6 +222,9 @@ class Handler(BaseHTTPRequestHandler):
         url = urllib.parse.urlparse(self.path)
         path = url.path
         try:
+            if path.startswith("/engine/providers") or path == "/engine/oauth/callback":
+                if self._providers_get(path, urllib.parse.parse_qs(url.query)):
+                    return
             if path == "/engine/settings":
                 return self._send(200, {"settings": settings.load(), "effective": settings.effective()})
             if path == "/engine/fs":
@@ -307,6 +360,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(404, {"error": "not_found", "message": "Ruta desconocida"})
         except (stems.StemsError, analysis.AnalysisError, envsetup.EnvError, llmserver.LlmServerError) as e:
             return self._send(409, {"error": "stems", "message": str(e)})
+        except providers.ProviderError as e:
+            return self._send(e.status if 400 <= e.status < 600 else 409, {"error": e.code, "message": e.message})
         except tidal.SourceError as e:
             return self._send(409, {"error": e.code, "message": e.message})
         except Exception as e:  # una falla de TIDAL no debe tumbar el motor
@@ -319,6 +374,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(403, {"error": "origin", "message": "Origen no permitido"})
         path = self.path.split("?")[0]
         try:
+            if path.startswith("/engine/providers/") and self._providers_post(path):
+                return
             if path == "/engine/tidal/login/start":
                 return self._send(200, tidal.login_start(renew="renew=1" in self.path.partition("?")[2].split("&")))
             if path == "/engine/tidal/login/cancel":
@@ -429,6 +486,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(400, {"error": "settings", "message": str(e)})
         except (stems.StemsError, analysis.AnalysisError, envsetup.EnvError, llmserver.LlmServerError, services.OpenError, ValueError) as e:
             return self._send(409, {"error": "stems", "message": str(e)})
+        except providers.ProviderError as e:
+            return self._send(e.status if 400 <= e.status < 600 else 409, {"error": e.code, "message": e.message})
         except tidal.SourceError as e:
             return self._send(409, {"error": e.code, "message": e.message})
         except Exception as e:
