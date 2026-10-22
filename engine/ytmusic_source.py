@@ -48,7 +48,7 @@ class YouTubeMusicProvider(providers.Provider):
         out["capabilities"] = {**self.capabilities, "albums": unofficial.connected()}
         out["unofficial"] = {"installed": unofficial.installed(), "connected": unofficial.connected(), "install": unofficial.install_state(),
                              "protection": unofficial.protection(), "pairing": unofficial.pairing(),
-                             "extension": unofficial.EXT_DIR.is_dir()}
+                             "extension": unofficial.EXT_DIR.is_dir(), "browser": (unofficial.find_browser() or [None])[0]}
         out["official"] = {"configured": super().configured(), "connected": self._official()}
         return out
 
@@ -121,6 +121,9 @@ class YouTubeMusicProvider(providers.Provider):
                       "own": True, "readable": True, "addedAt": (p.get("snippet") or {}).get("publishedAt"), "url": f"https://music.youtube.com/playlist?list={p['id']}"}
                      for p in self._pages("playlists", CAPS["playlists"], {"part": "snippet,contentDetails", "mine": "true"})]
         return {"albums": [], "tracks": tracks, "skipped": skipped, "playlists": providers.newest_first(playlists)}
+
+    def album_tracks(self, album_id):
+        return unofficial.album_tracks(album_id)
 
     def playlist_tracks(self, playlist_id):
         if not ID_RE.match(str(playlist_id)):

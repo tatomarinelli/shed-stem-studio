@@ -6,6 +6,7 @@ Todo lo que viene de afuera (ruta, parámetros, cabeceras) se trata como dato.
 import json
 import os
 import osenv
+import extart
 import providers
 import ytmusic_unofficial
 import re
@@ -122,7 +123,9 @@ class Handler(BaseHTTPRequestHandler):
                     "/engine/providers/ytmusic/pair", "/engine/providers/ytmusic/pair/cancel"):
             yt = providers.get("ytmusic")
             if path.endswith("/pair"):
-                return self._send(200, ytmusic_unofficial.pair_start(self._port()))
+                size = int(self.headers.get("Content-Length", 0))
+                body = json.loads(self.rfile.read(size) or b"{}") if 0 < size <= 256 else {}
+                return self._send(200, ytmusic_unofficial.pair_start(self._port(), launch=body.get("launch") is True))
             if path.endswith("/pair/cancel"):
                 ytmusic_unofficial.pair_cancel()
             elif path.endswith("/install"):
@@ -301,6 +304,16 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_header("Content-Length", str(len(data)))
                 self.end_headers()
                 return self.wfile.write(data)
+            if path == "/engine/extart":
+                got = extart.fetch(urllib.parse.parse_qs(url.query).get("u", [""])[0])
+                if not got:
+                    return self._send(404, {"error": "not_found", "message": "Sin portada."})
+                self.send_response(200)
+                self.send_header("Content-Type", got[1])
+                self.send_header("Content-Length", str(len(got[0])))
+                self.send_header("Cache-Control", "public, max-age=604800")
+                self.end_headers()
+                return self.wfile.write(got[0])
             if path == "/engine/music":
                 q = {k: v[0] for k, v in urllib.parse.parse_qs(url.query).items()}
                 return self._send(200, catalog.query(

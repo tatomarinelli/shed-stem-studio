@@ -7,6 +7,7 @@
   import { toast } from '../lib/toast.svelte';
   import { providers } from '../lib/providers.svelte';
   import ProviderWizard from '../components/ProviderWizard.svelte';
+  import SourceBlock from '../components/SourceBlock.svelte';
   import TidalLogin from '../components/TidalLogin.svelte';
   import FolderPicker from '../components/FolderPicker.svelte';
 
@@ -34,12 +35,8 @@
 <h2>Fuentes</h2>
 
 <div class="cards">
-  <section class="card">
-    <header>
-      <div><h3>Archivos locales</h3>
-        <span class="state" class:ok={folders.length > 0}>{folders.length ? `${folders.length} ${folders.length === 1 ? 'carpeta' : 'carpetas'}` : 'sin carpetas'}</span></div>
-      <button onclick={() => (picking = true)}>Agregar carpeta</button>
-    </header>
+  <SourceBlock id="local" title="Archivos locales" ok={folders.length > 0} status={folders.length ? `${folders.length} ${folders.length === 1 ? 'carpeta' : 'carpetas'}` : 'sin carpetas'}>
+    <div class="actions"><button onclick={() => (picking = true)}>Agregar carpeta</button></div>
     <ul class="paths">
       {#each folders as f (f)}
         <li><span class="path">{f}</span><button class="ghost" onclick={() => remove(f)} aria-label="Quitar {f}">Quitar</button></li>
@@ -55,13 +52,10 @@
       </span>
       {#if folders.length}<button class="ghost" onclick={rescan} disabled={scanning}>Volver a leer</button>{/if}
     </footer>
-  </section>
+  </SourceBlock>
 
-  <section class="card">
-    <header>
-      <div><h3>TIDAL</h3><span class="state" class:ok={tidal.state === 'ready'}>{tidal.label}</span></div>
-      {#if tidal.state === 'ready'}<button class="ghost" onclick={() => tidal.logout()}>Desconectar</button>{/if}
-    </header>
+  <SourceBlock id="tidal" title="TIDAL" ok={tidal.state === 'ready'} status={tidal.label}>
+    {#if tidal.state === 'ready'}<div class="actions"><button class="ghost" onclick={() => tidal.logout()}>Desconectar</button></div>{/if}
 
     {#if tidal.state === 'idle' || tidal.state === 'connecting'}
       <p class="muted">Conectando…</p>
@@ -85,7 +79,7 @@
         <button class="ghost" onclick={() => music.refresh()} disabled={music.status?.tidal.refreshing}>Actualizar</button>
       </footer>
     {/if}
-  </section>
+  </SourceBlock>
 
   {#each providers.accounts as p (p.id)}<ProviderWizard {p} />{/each}
 </div>
@@ -98,12 +92,9 @@
 
 <style>
   h2 { margin: 0; font-size: 28px; letter-spacing: -0.02em; }
-  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 16px; align-items: start; }
-  .card { background: var(--glass); backdrop-filter: blur(16px) saturate(1.3); border: 1px solid var(--glass-line); border-radius: var(--radius); padding: 16px; display: grid; gap: 12px; box-shadow: 0 20px 50px -24px rgba(0,0,0,0.7); animation: rise 0.45s var(--ease) both; }
-  header, footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-  h3 { margin: 0; font-size: 20px; }
-  .state { font-size: 12.5px; color: var(--muted); }
-  .state.ok { color: #7cc7a3; }
+  .cards { display: grid; gap: 12px; max-width: 760px; }
+  .actions { display: flex; justify-content: flex-end; }
+  footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
   p { margin: 0; }
   .paths { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
   .paths li { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 6px 10px; border-radius: 10px; background: rgba(255,255,255,0.04); }

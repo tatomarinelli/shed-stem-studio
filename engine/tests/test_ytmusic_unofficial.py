@@ -253,6 +253,29 @@ class Pairing(Base):
             with self.assertRaises(ProviderError):
                 yu.pair_receive(token, bad)
 
+    def test_abre_el_navegador_propio_con_la_extension_y_perfil_aparte(self):
+        calls = []
+        with mock.patch.object(yu, "find_browser", return_value=("Chromium", "/usr/bin/chromium")), \
+                mock.patch.object(yu.subprocess, "Popen", side_effect=lambda cmd, **kw: calls.append((cmd, kw))):
+            out = yu.pair_start(8771, launch=True)
+        self.assertEqual((out["launched"], out["browser"]), (True, "Chromium"))
+        cmd = calls[0][0]
+        self.assertEqual(cmd[0], "/usr/bin/chromium")
+        self.assertIn(f"--load-extension={yu.EXT_DIR}", cmd)
+        self.assertTrue(any(a.startswith("--user-data-dir=") and a.endswith("browser-profile") for a in cmd))
+        self.assertEqual(cmd[-1], out["url"])  # la dirección lleva el token y el puerto
+
+    def test_sin_navegador_compatible_no_abre_nada(self):
+        with mock.patch.object(yu, "find_browser", return_value=None), mock.patch.object(yu.subprocess, "Popen") as popen:
+            out = yu.pair_start(8771, launch=True)
+        popen.assert_not_called()
+        self.assertFalse(out["launched"])
+
+    def test_sin_launch_solo_da_la_direccion(self):
+        with mock.patch.object(yu.subprocess, "Popen") as popen:
+            self.assertFalse(yu.pair_start(8771)["launched"])
+        popen.assert_not_called()
+
     def test_zip_de_la_extension(self):
         import io
         import zipfile

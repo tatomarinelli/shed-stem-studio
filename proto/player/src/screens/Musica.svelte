@@ -219,6 +219,7 @@
                 </div>
               </div>
             </div>
+            {#if !openAlbum.tidalId && !openAlbum.localIds.length}<p class="muted">Temas de tu cuenta ({openAlbum.sources.map(x => SRC[x] ?? x).join(', ')}). Para escucharlos, la app busca el audio en tus archivos o en TIDAL.</p>{/if}
             {#if albumError}<p class="err" role="alert">{albumError}</p>
             {:else if !albumTracks}<p class="muted">Cargando temas…</p>
             {:else}

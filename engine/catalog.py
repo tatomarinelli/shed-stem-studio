@@ -18,6 +18,7 @@ from pathlib import Path
 import library
 import recs
 import settings
+import extart
 import providers
 import tidal_source
 
@@ -263,6 +264,8 @@ def _albums_raw():
             if pid not in a["sources"]:
                 a["sources"].append(pid)
             a.setdefault("extIds", {})[pid] = t["id"]
+            if not a.get("artUrl") and extart.url_for(t.get("thumb")):
+                a["artUrl"] = extart.url_for(t["thumb"])
             if t.get("addedAt") and not a.get("savedAt"):
                 a["savedAt"] = t["addedAt"]
             a.setdefault("rank", rank)
@@ -300,7 +303,7 @@ def _tracks_raw():
                 x["savedAt"], x["rank"] = t.get("addedAt"), rank
             if pid not in x["sources"]:
                 x["sources"].append(pid)
-            x["ids"][pid] = t["id"]
+            x.setdefault("refs", {})[pid] = t["id"]  # referencia a la cuenta: no es audio, no va en `ids`
     for x in tracks.values():
         x["genres"] = x["genres"] or (_genres.get(album_key(x["artist"], x["album"])) or {}).get("genres", [])
         base = x["ids"].get("local") or x["ids"].get("tidal")
@@ -396,6 +399,19 @@ def status():
             "genres": dict(_genre_job)}
 
 
+_album_cache = {}  # (cuenta, id de disco) -> temas; lo que no se pudo leer no se guarda
+
+
+def _ext_album_tracks(pid, album_id):
+    k = (pid, album_id)
+    if k not in _album_cache:
+        try:
+            _album_cache[k] = providers.get(pid).album_tracks(album_id)["tracks"]
+        except Exception:  # sin sesión, sin red o disco que la cuenta no entrega: se muestra lo que haya
+            return []
+    return _album_cache[k]
+
+
 def album_detail(key):
     """Temas de un disco, uniendo las fuentes que lo tienen. Cada tema trae los ids por fuente."""
     a = next((x for x in snapshot()["albums"] if x["key"] == key), None)
@@ -413,9 +429,17 @@ def album_detail(key):
                 x["ids"]["tidal"] = t["id"]
         except Exception:
             pass
-    for pid in EXT_IDS:  # los temas guardados de esa cuenta que son de este disco (la cuenta no entrega el disco entero)
-        for i, t in enumerate(_ext_state(pid)["tracks"]):
-            if album_key(t["artist"], t.get("album", "")) == key:
+    if not a["tidalId"]:  # sin TIDAL: se pide el disco a la cuenta que lo tiene (Spotify / YouTube Music)
+        for pid, album_id in (a.get("extIds") or {}).items():
+            for i, t in enumerate(_ext_album_tracks(pid, album_id) or []):
                 x = tracks.setdefault(norm(t["title"]), {"title": t["title"], "artist": t["artist"], "album": a["title"], "duration": t.get("duration"), "ids": {}, "order": f"~{i:03d}"})
-                x["ids"][pid] = t["id"]
+                x.setdefault("refs", {})[pid] = t["id"]
+    for pid in EXT_IDS:  # respaldo: los temas guardados de esa cuenta que son de este disco
+        for i, t in enumerate(_ext_state(pid)["tracks"]):
+            if album_key(t["artist"], t.get("album", "")) != key:
+                continue
+            if norm(t["title"]) in tracks:
+                tracks[norm(t["title"])].setdefault("refs", {}).setdefault(pid, t["id"])
+            else:
+                tracks[norm(t["title"])] = {"title": t["title"], "artist": t["artist"], "album": a["title"], "duration": t.get("duration"), "ids": {}, "refs": {pid: t["id"]}, "order": f"~{i:03d}"}
     return {"album": a, "tracks": sorted(tracks.values(), key=lambda t: t["order"])}

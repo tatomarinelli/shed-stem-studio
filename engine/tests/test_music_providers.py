@@ -50,7 +50,8 @@ class Merge(unittest.TestCase):
 
     def test_tema_guardado_se_une_al_local_por_artista_y_titulo(self):
         t = catalog.query("tracks")["items"][0]
-        self.assertEqual(t["ids"], {"local": "L1", "spotify": "st1"})
+        self.assertEqual(t["ids"], {"local": "L1"})
+        self.assertEqual(t["refs"], {"spotify": "st1"})
 
     def test_sin_archivo_local_no_hay_portada_inventada(self):
         a = next(a for a in catalog.snapshot()["albums"] if a["title"] == "Nuevo")
@@ -104,3 +105,61 @@ class Refresh(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class AlbumDetail(Merge):
+    def test_disco_sin_tidal_se_pide_a_la_cuenta(self):
+        catalog._album_cache.clear()
+        fake = mock.Mock(album_tracks=lambda i: {"tracks": [{"id": "sv1", "title": "Uno", "artist": "Alguien", "duration": 100},
+                                                            {"id": "sv2", "title": "Dos", "artist": "Alguien", "duration": 200}]})
+        with mock.patch.object(providers, "get", return_value=fake):
+            d = catalog.album_detail(catalog.album_key("Alguien", "Nuevo"))
+        self.assertEqual([t["title"] for t in d["tracks"]], ["Uno", "Dos"])
+        self.assertEqual(d["tracks"][0]["ids"], {})  # una referencia no es audio
+        self.assertEqual(d["tracks"][0]["refs"], {"spotify": "sv1"})
+
+    def test_si_la_cuenta_falla_muestra_lo_guardado(self):
+        catalog._album_cache.clear()
+        boom = mock.Mock(album_tracks=mock.Mock(side_effect=providers.ProviderError("no_session", "x")))
+        with mock.patch.object(providers, "get", return_value=boom):
+            d = catalog.album_detail(catalog.album_key("Miles Davis", "Kind of Blue"))
+        self.assertEqual([t["title"] for t in d["tracks"]], ["So What"])
+        self.assertEqual(d["tracks"][0]["ids"], {"local": "L1"})
+        self.assertEqual(d["tracks"][0]["refs"], {"spotify": "st1"})
+
+
+class Covers(unittest.TestCase):
+    def test_solo_https_y_dominios_del_servicio(self):
+        import extart
+        self.assertTrue(extart.allowed("https://i.scdn.co/image/abc"))
+        for bad in ("http://i.scdn.co/x", "https://evil.example/x", "https://i.scdn.co.evil.example/x", "https://user@i.scdn.co/x", "file:///etc/passwd"):
+            self.assertFalse(extart.allowed(bad), bad)
+        self.assertIsNone(extart.url_for("https://evil.example/x"))
+        self.assertTrue(extart.url_for("https://i.scdn.co/image/abc").startswith("/engine/extart?u="))
+
+    def test_baja_una_vez_y_despues_sale_de_disco(self):
+        import extart
+
+        class R:
+            headers = {"Content-Type": "image/jpeg"}
+            def read(self, n=-1): return b"\xff\xd8jpg"
+            def __enter__(self): return self
+            def __exit__(self, *a): return False
+        calls = []
+        with tempfile.TemporaryDirectory() as d, mock.patch.object(extart, "_cache_dir", return_value=Path(d)), \
+                mock.patch.object(extart, "_urlopen", side_effect=lambda *a, **k: (calls.append(1), R())[1]):
+            self.assertEqual(extart.fetch("https://i.scdn.co/image/abc"), (b"\xff\xd8jpg", "image/jpeg"))
+            self.assertEqual(extart.fetch("https://i.scdn.co/image/abc")[0], b"\xff\xd8jpg")
+        self.assertEqual(len(calls), 1)
+
+    def test_rechaza_lo_que_no_es_imagen(self):
+        import extart
+
+        class R:
+            headers = {"Content-Type": "text/html"}
+            def read(self, n=-1): return b"<html>"
+            def __enter__(self): return self
+            def __exit__(self, *a): return False
+        with tempfile.TemporaryDirectory() as d, mock.patch.object(extart, "_cache_dir", return_value=Path(d)), \
+                mock.patch.object(extart, "_urlopen", return_value=R()):
+            self.assertIsNone(extart.fetch("https://i.scdn.co/image/abc"))

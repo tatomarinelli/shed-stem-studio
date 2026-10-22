@@ -4,8 +4,9 @@ import { toast } from './toast.svelte';
 export interface Playable { title: string; artist: string; album?: string; ids?: { local?: string; tidal?: string }; sourceId?: string; resolve?: boolean }
 
 /** Clave de un tema en la cola: sirve para saber qué fila es la que suena. */
+const hasAudioIds = (p: Playable) => !!(p.ids && (p.ids.local || p.ids.tidal));
 export const playableKey = (p: Playable) =>
-  p.ids ? `ids:${p.ids.local ?? ''}|${p.ids.tidal ?? ''}` : p.sourceId ? `id:${p.sourceId}` : `q:${p.artist}|${p.title}|${p.album ?? ''}`;
+  hasAudioIds(p) ? `ids:${p.ids?.local ?? ''}|${p.ids?.tidal ?? ''}` : p.sourceId ? `id:${p.sourceId}` : `q:${p.artist}|${p.title}|${p.album ?? ''}`;
 
 /**
  * Elige el id reproducible de un tema según el orden de fuentes de Ajustes (lo decide el motor).
@@ -14,7 +15,7 @@ export const playableKey = (p: Playable) =>
 export async function resolveId(p: Playable): Promise<string | null> {
   if (!p.resolve && !p.ids) return p.sourceId ?? null;
   try {
-    if (p.ids) {
+    if (p.ids && hasAudioIds(p)) {  // sin ids de audio (tema solo de una cuenta) se busca por artista y título
       const q = new URLSearchParams({ ...(p.ids.local ? { local: p.ids.local } : {}), ...(p.ids.tidal ? { tidal: p.ids.tidal } : {}) });
       const r = await (await fetch(`/engine/pick?${q}`)).json();
       if (!r.id) { toast.show(r.message ?? `No pude elegir una fuente para "${p.title}".`, 'warn'); return null; }

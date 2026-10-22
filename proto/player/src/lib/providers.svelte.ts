@@ -11,7 +11,7 @@ export interface ProviderStatus {
   note: string;
   managedBy?: string;
   /** Solo YouTube Music: la biblioteca completa con ytmusicapi (no oficial) y el estado de la API oficial. */
-  unofficial?: { installed: boolean; connected: boolean; install: { state: string; error?: string }; pairing: boolean; extension: boolean; protection: ProviderStatus['protection'] };
+  unofficial?: { installed: boolean; connected: boolean; install: { state: string; error?: string }; pairing: boolean; extension: boolean; browser: string | null; protection: ProviderStatus['protection'] };
   official?: { configured: boolean; connected: boolean };
 }
 
@@ -78,11 +78,11 @@ class Providers {
   }
 
   /** Abre music.youtube.com con un token de un solo uso: la extensión toma la sesión y se la pasa al motor. */
-  async pairYt() {
+  async pairYt(launch = false) {
     this.busy = 'ytmusic'; this.messages.ytmusic = '';
     try {
-      const { url } = await this.#post('ytmusic', 'pair');
-      window.open(url, '_blank', 'noopener,noreferrer');
+      const { url, launched } = await this.#post('ytmusic', 'pair', { launch });
+      if (!launched) window.open(url, '_blank', 'noopener,noreferrer');
       this.waiting = 'ytmusic';
       const until = Date.now() + 10 * 60_000;
       window.clearInterval(this.#poll);

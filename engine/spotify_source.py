@@ -66,6 +66,21 @@ class SpotifyProvider(providers.Provider):
                               "readable": readable, "addedAt": None, "url": (p.get("external_urls") or {}).get("spotify", "")})
         return {"albums": newest_first([a for a in albums if a["id"]]), "tracks": newest_first([t for t in tracks if t["id"]]), "playlists": playlists}
 
+    def album_tracks(self, album_id):
+        """Temas de un disco (para abrirlo en Música cuando no está en TIDAL ni en tus archivos)."""
+        if not ID_RE.match(str(album_id)):
+            raise ProviderError("bad_id", "Disco inválido.", 400)
+        items = self._pages(f"{API}/albums/{album_id}/tracks", 200)
+        out = []
+        for t in items:
+            if not t or not t.get("id"):
+                continue
+            artists = [a.get("name", "") for a in t.get("artists") or []]
+            out.append(norm_track("spotify", t["id"], t.get("name"), artists[0] if artists else "", "",
+                                  round(t["duration_ms"] / 1000) if t.get("duration_ms") else None, "", None,
+                                  (t.get("external_urls") or {}).get("spotify", ""), n=t.get("track_number")))
+        return {"tracks": out}
+
     def playlist_tracks(self, playlist_id):
         if not ID_RE.match(str(playlist_id)):
             raise ProviderError("bad_id", "Playlist inválida.", 400)
@@ -93,4 +108,10 @@ def _album(a, added_at):
     year = (a.get("release_date") or "")[:4]
     return {"id": a.get("id", ""), "source": "spotify", "title": a.get("name", ""), "artist": artists[0] if artists else "",
             "artists": artists, "year": int(year) if year.isdigit() else None, "tracks": a.get("total_tracks"),
-            "upc": (a.get("external_ids") or {}).get("upc", ""), "addedAt": added_at, "url": (a.get("external_urls") or {}).get("spotify", "")}
+            "upc": (a.get("external_ids") or {}).get("upc", ""), "thumb": _thumb(a.get("images")), "addedAt": added_at, "url": (a.get("external_urls") or {}).get("spotify", "")}
+
+
+def _thumb(images):
+    """La imagen más cercana a 300 px (la lista viene de grande a chica)."""
+    imgs = [i for i in images or [] if isinstance(i, dict) and i.get("url")]
+    return min(imgs, key=lambda i: abs((i.get("width") or 300) - 300))["url"] if imgs else ""

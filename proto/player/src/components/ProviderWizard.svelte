@@ -1,6 +1,7 @@
 <script lang="ts">
   import { providers, type ProviderStatus } from '../lib/providers.svelte';
   import { music } from '../lib/music.svelte';
+  import SourceBlock from './SourceBlock.svelte';
 
   let { p }: { p: ProviderStatus } = $props();
   let clientId = $state('');
@@ -36,14 +37,9 @@
   }
 </script>
 
-<section class="card" data-provider={p.id}>
-  <header>
-    <div>
-      <h3>{p.label}</h3>
-      <span class="state" class:ok={p.connected} role="status">{p.connected ? 'conectado' : waiting ? 'esperando autorización' : p.configured ? 'listo para conectar' : 'sin conectar'}</span>
-    </div>
-    {#if p.connected}<button class="ghost" disabled={busy} onclick={disconnect}>Desconectar</button>{/if}
-  </header>
+<SourceBlock id={p.id} title={p.label} ok={p.connected} status={p.connected ? 'conectado' : waiting ? 'esperando autorización' : p.configured ? 'listo para conectar' : 'sin conectar'}>
+  <div data-provider={p.id} class="wiz">
+  {#if p.connected}<div class="actions"><button class="ghost" disabled={busy} onclick={disconnect}>Desconectar</button></div>{/if}
 
   {#if p.connected}
     <dl>
@@ -73,21 +69,22 @@
           {:else}<button class="primary" onclick={() => (askInstall = true)}>Instalar ytmusicapi…</button>{/if}
           {#if un.install.state === 'error'}<p class="err" role="alert">{un.install.error}</p>{/if}
         {:else}
-          {#if un.extension}
-            <ol class="mini">
-              <li>Una sola vez: <a href="/engine/ytmusic-extension.zip" download>bajá la extensión</a>, descomprimila y cargala en tu navegador (Chrome o Edge: <code>chrome://extensions</code> → Modo de desarrollador → <i>Cargar descomprimida</i>; Firefox: <code>about:debugging</code> → <i>Cargar complemento temporal</i>).</li>
-              <li>Tocá <b>Conectar</b>: se abre YouTube Music con tu sesión y la extensión le pasa la sesión a la app sola. No copiás nada.</li>
-            </ol>
-            <div class="row">
-              {#if waiting}
-                <span class="muted" role="status">Esperando… navegá un segundo por YouTube Music (por ejemplo, entrá a Biblioteca).</span>
-                <button class="ghost" onclick={() => providers.cancelPairYt()}>Cancelar</button>
-              {:else}
-                <button class="primary" disabled={busy} onclick={() => providers.pairYt()}>Conectar con la extensión</button>
-              {/if}
-            </div>
-          {/if}
-          <details class="off-api" open={!un.extension}><summary>{un.extension ? 'Sin extensión: pegar los encabezados a mano' : 'Pegar los encabezados a mano'}</summary>
+          <div class="row">
+            {#if waiting}
+              <span class="muted" role="status">Esperando… iniciá sesión en la ventana que se abrió y entrá a tu Biblioteca.</span>
+              <button class="ghost" onclick={() => providers.cancelPairYt()}>Cancelar</button>
+            {:else}
+              <button class="primary" disabled={busy} onclick={() => providers.pairYt(true)}>Conectar</button>
+              <span class="muted small">{un.browser ? `Abre una ventana de ${un.browser} propia de la app: iniciás sesión una vez y listo.` : 'No encontré Chromium, Chrome, Edge ni Brave: usá una de las opciones de abajo.'}</span>
+            {/if}
+          </div>
+          {#if providers.messages.ytmusic}<p class="err" role="alert">{providers.messages.ytmusic}</p>{/if}
+          <details class="off-api"><summary>Otro navegador o a mano</summary>
+            {#if un.extension}
+              <p class="small">Con la extensión: <a href="/engine/ytmusic-extension.zip" download>bajala</a>, cargala en tu navegador y tocá <button class="ghost link" disabled={busy} onclick={() => providers.pairYt(false)}>Conectar desde mi navegador</button>.</p>
+            {/if}
+            <p class="small">O pegá los encabezados:</p>
+          
           <ol class="mini">
             <li>Abrí <a href="https://music.youtube.com" target="_blank" rel="noopener noreferrer">music.youtube.com</a> con tu cuenta y las herramientas del navegador (F12) → pestaña <i>Red</i>.</li>
             <li>Escribí <i>browse</i> en el filtro, tocá cualquier sección de YouTube Music y buscá una petición <i>POST</i> a <code>/youtubei/v1/browse</code>.</li>
@@ -107,7 +104,8 @@
     {/if}
   {/if}
   {#if providers.messages[p.id]}<p class="err" role="alert">{providers.messages[p.id]}</p>{/if}
-</section>
+  </div>
+</SourceBlock>
 
 {#snippet stepsList()}
     <ol class="steps">
@@ -158,11 +156,9 @@
 {/snippet}
 
 <style>
-  .card { background: var(--glass); backdrop-filter: blur(16px) saturate(1.3); border: 1px solid var(--glass-line); border-radius: var(--radius); padding: 16px; display: grid; gap: 12px; box-shadow: 0 20px 50px -24px rgba(0,0,0,0.7); animation: rise 0.45s var(--ease) both; }
-  header, footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-  h3 { margin: 0; font-size: 20px; }
-  .state { font-size: 12.5px; color: var(--muted); }
-  .state.ok { color: #7cc7a3; }
+  .wiz { display: grid; gap: 12px; }
+  .actions { display: flex; justify-content: flex-end; }
+  footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
   p { margin: 0; font-size: 13.5px; }
   .small { font-size: 12.5px; }
   dl { display: grid; grid-template-columns: 1fr auto; gap: 6px 16px; margin: 0; }

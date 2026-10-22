@@ -12,6 +12,8 @@ biblioteca (con álbum) y playlists. Es opcional, solo lectura y se elige desde 
 import hmac
 import io
 import json
+import os
+import re
 import secrets
 import subprocess
 import sys
@@ -88,10 +90,52 @@ EXT_DIR = Path(__file__).resolve().parent / "ytmusic_extension"
 _pair = {}
 
 
-def pair_start(port):
+def pair_start(port, launch=False):
+    """Crea el token. Con `launch`, abre un navegador Chromium propio de la app (perfil aparte, extensión ya cargada) en
+    YouTube Music: el usuario inicia sesión ahí una vez y no instala nada. Sin navegador compatible, `launched` es False
+    y la interfaz abre la dirección en el navegador de siempre (hace falta la extensión cargada a mano)."""
     with _lock:
         _pair.update(token=secrets.token_urlsafe(24), exp=time.time() + PAIR_TTL)
-        return {"url": f"https://music.youtube.com/#stemshed={_pair['token']}&port={int(port)}", "expiresIn": PAIR_TTL}
+        url = f"https://music.youtube.com/#stemshed={_pair['token']}&port={int(port)}"
+    browser = launch_browser(url) if launch else None
+    return {"url": url, "expiresIn": PAIR_TTL, "launched": bool(browser), "browser": browser}
+
+
+def find_browser():
+    """Un navegador de la familia Chromium instalado: (nombre, ruta) o None."""
+    import shutil
+    if osenv.WINDOWS:
+        roots = [os.environ.get(k) for k in ("ProgramFiles", "ProgramFiles(x86)", "LOCALAPPDATA")]
+        rel = {"Edge": r"Microsoft\Edge\Application\msedge.exe", "Chrome": r"Google\Chrome\Application\chrome.exe", "Brave": r"BraveSoftware\Brave-Browser\Application\brave.exe"}
+        for name, r in rel.items():
+            for root in filter(None, roots):
+                if (Path(root) / r).is_file():
+                    return name, str(Path(root) / r)
+        return None
+    for name, exe in (("Chromium", "chromium"), ("Chromium", "chromium-browser"), ("Chrome", "google-chrome-stable"), ("Chrome", "google-chrome"),
+                      ("Brave", "brave"), ("Edge", "microsoft-edge-stable"), ("Edge", "microsoft-edge")):
+        path = shutil.which(exe)
+        if path:
+            return name, path
+    return None
+
+
+def browser_command(exe, url):
+    return [exe, f"--user-data-dir={osenv.config_dir() / 'browser-profile'}", f"--load-extension={EXT_DIR}",
+            "--disable-features=DisableLoadExtensionCommandLineSwitch", "--no-first-run", "--no-default-browser-check", url]
+
+
+def launch_browser(url):
+    found = find_browser() if EXT_DIR.is_dir() else None
+    if not found:
+        return None
+    name, exe = found
+    flags = {"creationflags": getattr(subprocess, "DETACHED_PROCESS", 0) | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)} if osenv.WINDOWS else {"start_new_session": True}
+    try:
+        subprocess.Popen(browser_command(exe, url), stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, **flags)
+    except OSError:
+        return None
+    return name
 
 
 def pairing():
@@ -211,7 +255,7 @@ def _album(a):
         return None
     year = str(a.get("year") or "")
     return {"id": a["browseId"], "source": "ytmusic", "title": a["title"], "artist": _artist(a), "year": int(year) if year.isdigit() else None,
-            "addedAt": None, "url": f"https://music.youtube.com/browse/{a['browseId']}"}  # la lista viene de lo último guardado a lo más viejo
+            "thumb": _thumb(a.get("thumbnails")), "addedAt": None, "url": f"https://music.youtube.com/browse/{a['browseId']}"}  # la lista viene de lo último guardado a lo más viejo
 
 
 def _track(t):
@@ -220,6 +264,33 @@ def _track(t):
     album = t.get("album") if isinstance(t.get("album"), dict) else {}
     return norm_track("ytmusic", t["videoId"], t["title"], _artist(t), album.get("name", ""), t.get("duration_seconds"), "", None,
                       f"https://music.youtube.com/watch?v={t['videoId']}")
+
+
+def _thumb(thumbs):
+    ts = [t for t in thumbs or [] if isinstance(t, dict) and t.get("url")]
+    return min(ts, key=lambda t: abs((t.get("width") or 300) - 300))["url"] if ts else ""
+
+
+def album_tracks(browse_id):
+    """Temas de un disco de YouTube Music (para abrirlo en Música aunque no esté en TIDAL ni en tus archivos)."""
+    headers = STORE.load()
+    if not headers:
+        raise ProviderError("no_session", "Todavía no conectaste la biblioteca completa de YouTube Music.", 401)
+    if not re.fullmatch(r"[A-Za-z0-9_-]{6,64}", str(browse_id)):
+        raise ProviderError("bad_id", "Disco inválido.", 400)
+    try:
+        alb = _client(headers).get_album(browse_id)
+    except ProviderError:
+        raise
+    except Exception as e:
+        raise _friendly(e)
+    name = alb.get("title", "") if isinstance(alb, dict) else ""
+    out = []
+    for t in (alb.get("tracks") or []) if isinstance(alb, dict) else []:
+        if isinstance(t, dict) and t.get("videoId") and t.get("title"):
+            out.append(norm_track("ytmusic", t["videoId"], t["title"], _artist(t) or _artist(alb), name, t.get("duration_seconds"), "", None,
+                                  f"https://music.youtube.com/watch?v={t['videoId']}"))
+    return {"tracks": out}
 
 
 def _playlist(p):

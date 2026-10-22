@@ -272,6 +272,9 @@ class Provider:
     def library(self):
         raise NotImplementedError
 
+    def album_tracks(self, album_id):
+        raise NotImplementedError
+
     def playlist_tracks(self, playlist_id):
         raise NotImplementedError
 
