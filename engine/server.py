@@ -7,6 +7,7 @@ import json
 import os
 import osenv
 import providers
+import ytmusic_unofficial
 import re
 import ssl
 import sys
@@ -117,6 +118,21 @@ class Handler(BaseHTTPRequestHandler):
         return False
 
     def _providers_post(self, path):
+        if path in ("/engine/providers/ytmusic/headers", "/engine/providers/ytmusic/headers/clear", "/engine/providers/ytmusic/install"):
+            yt = providers.get("ytmusic")
+            if path.endswith("/install"):
+                ytmusic_unofficial.install()
+            elif path.endswith("/clear"):
+                ytmusic_unofficial.clear()
+                if not yt.connected():
+                    catalog.forget_provider("ytmusic")
+            else:
+                size = int(self.headers.get("Content-Length", 0))
+                body = json.loads(self.rfile.read(size) or b"{}") if 0 < size <= ytmusic_unofficial.HEADERS_MAX + 512 else {}
+                ytmusic_unofficial.save_headers(body.get("headers", ""))
+                catalog.refresh_providers()
+            self._send(200, yt.status(self._port()))
+            return True
         m = re.fullmatch(r"/engine/providers/(spotify|ytmusic)/(app|auth/start|logout)", path)
         if not m:
             return False

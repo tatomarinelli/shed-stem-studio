@@ -52,3 +52,11 @@ La sesión de TIDAL todavía usa `protect_file` (texto plano brevemente); migrar
 5. Decidir si se agrega `ytmusicapi` como complemento no público.
 6. Verificar en Windows real: DPAPI de `write_protected`, el flujo OAuth (puerto y firewall) y la apertura del navegador desde la ventana WebView2.
 7. Tarjetas de Spotify/YT en Fuentes con conteos (hoy solo conectar/desconectar en Ajustes).
+
+## Biblioteca completa de YouTube Music con ytmusicapi (opcional)
+Implementado en `engine/ytmusic_unofficial.py`. Es **no oficial** y está desactivado hasta que el usuario lo pide desde Fuentes:
+- La librería no viene incluida: "Instalar ytmusicapi…" (con confirmación) corre `pip install --target <config>/pylibs`. Nada se instala solo.
+- Login una sola vez, método "browser": se pegan los encabezados de una petición POST a `/youtubei/v1/browse` con la sesión abierta (tiene que traer `Authorization: SAPISIDHASH`). Se valida leyendo un disco y se guardan cifrados (`osenv.write_protected`).
+- Lee álbumes guardados, temas de la biblioteca y playlists (lo más reciente primero, `order=recently_added`; la librería no da fecha de guardado). La API oficial, si también está conectada, suma los "Me gusta" sin duplicar.
+- Si Google invalida la sesión o YouTube cambia algo, la lectura falla con un mensaje ("pegá los encabezados de nuevo" / "la librería necesita actualizarse"); el resto de la app sigue andando.
+- Verificado solo con una librería falsa y con la firma real de ytmusicapi 1.12.3 (instalada fuera del repo). **Sin probar con una cuenta real** ni en Windows.

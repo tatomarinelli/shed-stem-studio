@@ -8,6 +8,7 @@ escritorio) en Ajustes; se guardan cifrados. El audio no se obtiene.
 import re
 
 import providers
+import ytmusic_unofficial as unofficial
 from providers import ProviderError, norm_track
 
 API = "https://www.googleapis.com/youtube/v3"
@@ -26,6 +27,29 @@ class YouTubeMusicProvider(providers.Provider):
     scopes = ("https://www.googleapis.com/auth/youtube.readonly",)
     needs_secret = True
     note = "La API oficial no da los álbumes guardados: solo playlists y Me gusta (música). No entrega audio."
+
+    # La cuenta cuenta como conectada si tiene la API oficial o la biblioteca completa (no oficial), o las dos.
+    def _official(self):
+        return super().configured() and super().connected()
+
+    def configured(self):
+        return super().configured() or unofficial.connected()
+
+    def connected(self):
+        return self._official() or unofficial.connected()
+
+    def logout(self):
+        super().logout()
+        unofficial.clear()
+
+    def status(self, port=8770):
+        out = super().status(port)
+        out["connected"] = out["configured"] and self.connected()
+        out["capabilities"] = {**self.capabilities, "albums": unofficial.connected()}
+        out["unofficial"] = {"installed": unofficial.installed(), "connected": unofficial.connected(), "install": unofficial.install_state(),
+                             "protection": unofficial.protection()}
+        out["official"] = {"configured": super().configured(), "connected": self._official()}
+        return out
 
     def extra_auth_params(self):
         return {"access_type": "offline", "prompt": "consent"}  # sin esto Google no entrega refresh token
@@ -68,6 +92,27 @@ class YouTubeMusicProvider(providers.Provider):
         return out, skipped
 
     def library(self):
+        """Biblioteca completa (no oficial) si está conectada; la API oficial aporta lo que la otra no trae (Me gusta) y es el respaldo."""
+        full, official, note = None, None, ""
+        if unofficial.connected():
+            try:
+                full = unofficial.library()
+            except ProviderError as e:
+                if not self._official():
+                    raise
+                note = e.message  # se sigue con la API oficial y se avisa
+        if self._official():
+            official = self._official_library()
+        if not full:
+            return {**official, "note": note} if official else {"albums": [], "tracks": [], "playlists": []}
+        if not official:
+            return full
+        seen = {t["id"] for t in full["tracks"]}
+        pl = {p["id"] for p in full["playlists"]}
+        return {"albums": full["albums"], "tracks": full["tracks"] + [t for t in official["tracks"] if t["id"] not in seen],
+                "playlists": full["playlists"] + [p for p in official["playlists"] if p["id"] not in pl]}
+
+    def _official_library(self):
         ch = self.api(f"{API}/channels", {"part": "contentDetails", "mine": "true"}).get("items") or []
         likes = ((ch[0].get("contentDetails") or {}).get("relatedPlaylists") or {}).get("likes") if ch else None
         tracks, skipped = self._music_items(likes, CAPS["likes"]) if likes else ([], 0)

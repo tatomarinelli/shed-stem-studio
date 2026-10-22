@@ -10,6 +10,9 @@ export interface ProviderStatus {
   redirectUri: string;
   note: string;
   managedBy?: string;
+  /** Solo YouTube Music: la biblioteca completa con ytmusicapi (no oficial) y el estado de la API oficial. */
+  unofficial?: { installed: boolean; connected: boolean; install: { state: string; error?: string }; protection: ProviderStatus['protection'] };
+  official?: { configured: boolean; connected: boolean };
 }
 
 class Providers {
@@ -60,6 +63,26 @@ class Providers {
       }, 2000);
     } catch (e) { this.messages[id] = e instanceof Error ? e.message : 'Error'; }
     finally { this.busy = ''; }
+  }
+
+  /** Acciones de la biblioteca completa de YouTube Music (instalar la librería, pegar o quitar los encabezados). */
+  async ytAction(path: 'install' | 'headers' | 'headers/clear', body?: unknown) {
+    this.busy = 'ytmusic'; this.messages.ytmusic = '';
+    try {
+      await this.#post('ytmusic', path, body);
+      await this.load();
+      if (path === 'install') this.#pollInstall();
+      return true;
+    } catch (e) { this.messages.ytmusic = e instanceof Error ? e.message : 'Error'; return false; }
+    finally { this.busy = ''; }
+  }
+
+  #pollInstall() {
+    window.clearInterval(this.#poll);
+    this.#poll = window.setInterval(async () => {
+      await this.load();
+      if (this.list.find(p => p.id === 'ytmusic')?.unofficial?.install.state !== 'running') window.clearInterval(this.#poll);
+    }, 1500);
   }
 
   cancelWait() { this.waiting = ''; window.clearInterval(this.#poll); }
