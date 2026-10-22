@@ -9,6 +9,8 @@ from pathlib import Path
 
 import analysis
 import envsetup
+import llmdetect
+import llmserver
 import models
 import recs
 import resources
@@ -56,6 +58,9 @@ def active_jobs():
             jobs.append({"kind": "descarga", "label": mid, "percent": j.get("percent")})
     if stems._dl["state"] == "running":
         jobs.append({"kind": "descarga", "label": "Modelo de separación", "percent": stems._dl["percent"]})
+    for label, j in (("ffmpeg", llmserver._ffmpeg_job), ("Servidor de modelos (Ollama)", llmserver._job), ("llama-server", llmdetect._job)):
+        if j["state"] == "running":
+            jobs.append({"kind": "instalación" if j is not llmdetect._job else "carga", "label": label, "percent": j.get("percent"), "step": j.get("step")})
     if envsetup._job["state"] == "running":
         jobs.append({"kind": "instalación", "label": "Entorno de separación", "percent": envsetup._job["percent"]})
     if recs._state.get("state") == "running":
@@ -69,7 +74,7 @@ def report():
     return {
         "engine": {"host": _server["host"], "port": _server["port"], "pid": os.getpid(), "uptimeSec": int(time.time() - START),
                    "docker": in_docker(), "origins": _server["origins"], "hostPaths": host_paths()},
-        "llm": {"url": models.OLLAMA, "running": tags is not None, "own": models._proc is not None and models._proc.poll() is None,
+        "llm": {"url": models.OLLAMA, "provider": models.PROVIDER, "running": tags is not None, "own": models._proc is not None and models._proc.poll() is None,
                 "loaded": models.loaded() if tags is not None else [], "installed": len(tags or [])},
         "tidal": {"connected": bool(tidal_source.status().get("connected"))},
         "scheduler": {"auto": bool(s.get("recsAuto")), "cadenceHours": s.get("recsCadenceHours")},
@@ -87,6 +92,7 @@ def shutdown():
     def stop():
         time.sleep(0.4)  # deja salir la respuesta
         models.stop_own_ollama()
+        llmdetect.stop_llamacpp()
         resources.SAMPLER.stop()  # cierra el nvidia-smi persistente
         if httpd:
             httpd.shutdown()

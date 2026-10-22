@@ -86,6 +86,8 @@ def report(gpus):
         options.append({"id": b["id"], "label": b["label"], "approxGb": b["approxGb"], "installable": b["installable"],
                         "compatible": compatible(b["id"], gpus), "requires": b.get("requires"),
                         "recommended": b["id"] == rec, "verified": verified,
+                        "group": "soon" if not b["installable"] else "available" if compatible(b["id"], gpus) else "incompatible",
                         "note": _why(b, gpus) if not b["installable"] else b["about"]})
+    options.sort(key=lambda o: (0 if o["recommended"] else 1 if o["group"] == "available" else 2 if o["group"] == "incompatible" else 3))
     reason = f"Detectado: {gpu['name']}" if gpu else "Sin placa de video"
     return {"recommended": rec, "reason": reason, "gpu": gpu["name"] if gpu else None, "options": options}

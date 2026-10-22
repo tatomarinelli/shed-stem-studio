@@ -5,6 +5,7 @@ mientras se separa y se borra enseguida; los stems (que suman la mezcla) son lo 
 Uso personal con la sesión del propio usuario.
 """
 import json
+import jobs
 import os
 import osenv
 import re
@@ -64,7 +65,7 @@ def sep_download_start():
     with _dl_lock:
         if _dl["state"] == "running":
             raise StemsError("Ya hay una descarga en curso.")
-        _dl.update(state="running", percent=0, message="", done=0, total=0, rate=0)
+        jobs.start(_dl, state="running", percent=0, message="", step="Descargando el modelo", done=0, total=0, rate=0)
         _dl_holder.clear()
         _dl_holder["had"] = sep_model_present()
 
@@ -73,12 +74,12 @@ def sep_download_start():
             MODELS_DIR.mkdir(parents=True, exist_ok=True)
 
             def progress(kind, pct):
-                _dl["percent"] = pct
+                jobs.update(_dl, percent=pct)
 
             def on_line(line):
                 got = parse_transfer(line)
                 if got:
-                    _dl.update(got)
+                    jobs.update(_dl, **got)
 
             code, tail = run_separator([str(py_sep), "--download_model_only", "--model_filename", MODEL_FILE, "--model_file_dir", str(MODELS_DIR)],
                                        {**os.environ}, progress, on_line, _dl_holder)
@@ -86,13 +87,13 @@ def sep_download_start():
                 if not _dl_holder["had"]:  # una descarga cortada deja un .ckpt a medias que sep_model_present() daría por bueno
                     for f in SEP_FILES:
                         (MODELS_DIR / f).unlink(missing_ok=True)
-                _dl.update(state="cancelled", percent=0)
+                jobs.update(_dl, state="cancelled", percent=0)
                 return
             if code != 0 or not sep_model_present():
                 raise StemsError("No se pudo descargar: " + (tail.strip().splitlines() or ["sin salida"])[-1][:200])
-            _dl.update(state="done", percent=100)
+            jobs.update(_dl, state="done", percent=100)
         except Exception as e:
-            _dl.update(state="error", message=str(e) if isinstance(e, StemsError) else f"No se pudo descargar: {type(e).__name__}")
+            jobs.update(_dl, state="error", message=str(e) if isinstance(e, StemsError) else f"No se pudo descargar: {type(e).__name__}")
 
     threading.Thread(target=work, daemon=True).start()
     return dict(_dl)
@@ -102,6 +103,7 @@ def sep_download_cancel():
     if _dl["state"] != "running":
         raise StemsError("No hay una descarga en curso.")
     _dl_holder["cancelled"] = True
+    _dl["cancelling"] = True
     osenv.kill_tree(_dl_holder.get("proc"))
     return {"state": "cancelling"}
 

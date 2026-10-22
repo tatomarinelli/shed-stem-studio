@@ -86,6 +86,72 @@ def find_ollama():
     return None
 
 
+def home():
+    return Path(os.environ.get("USERPROFILE") or Path.home()) if WINDOWS else Path.home()
+
+
+def find_executable(name, extra_dirs=()):
+    """`name` en el PATH o en `extra_dirs` (con .exe en Windows). Solo mira; no ejecuta nada. None si no está."""
+    import shutil
+    found = shutil.which(name)
+    if found:
+        return found
+    exe = name + (".exe" if WINDOWS else "")
+    for d in extra_dirs:
+        cand = Path(d) / exe
+        if cand.is_file():
+            return str(cand)
+    return None
+
+
+def llama_server_dirs():
+    """Carpetas donde suele quedar llama-server (llama.cpp) fuera del PATH."""
+    h = home()
+    if WINDOWS:
+        import glob
+        local = os.environ.get("LOCALAPPDATA")
+        dirs = [h / "llama.cpp", h / "llama.cpp" / "build" / "bin" / "Release", h / "llama.cpp" / "build" / "bin"]
+        if local:
+            dirs += [Path(local) / "Programs" / "llama.cpp", Path(local) / "Microsoft" / "WinGet" / "Links"]
+            dirs += [Path(p) for p in sorted(glob.glob(os.path.join(local, "Microsoft", "WinGet", "Packages", "*LlamaCpp*")))]
+        return dirs
+    return [h / ".local" / "bin", Path("/usr/local/bin"), Path("/opt/llama.cpp/bin"), h / "llama.cpp" / "build" / "bin"]
+
+
+def find_llama_server():
+    """llama-server: STEMSHED_LLAMA_SERVER, el PATH o las carpetas habituales de cada sistema."""
+    forced = os.environ.get("STEMSHED_LLAMA_SERVER")
+    if forced and Path(forced).is_file():
+        return forced
+    return find_executable("llama-server", llama_server_dirs())
+
+
+def gguf_roots():
+    """Carpetas donde otros programas dejan modelos .gguf (llama.cpp, LM Studio, Hugging Face). Solo se leen."""
+    h = home()
+    roots = []
+    if os.environ.get("LLAMA_CACHE"):
+        roots.append(Path(os.environ["LLAMA_CACHE"]))
+    if WINDOWS and os.environ.get("LOCALAPPDATA"):
+        roots.append(Path(os.environ["LOCALAPPDATA"]) / "llama.cpp")
+    else:
+        roots.append(Path(os.environ.get("XDG_CACHE_HOME") or h / ".cache") / "llama.cpp")
+    roots += [h / ".lmstudio" / "models", h / ".cache" / "lm-studio" / "models",
+              Path(os.environ.get("HF_HOME") or h / ".cache" / "huggingface") / "hub"]
+    return roots
+
+
+def ollama_model_roots():
+    """Carpetas de modelos de un Ollama ya instalado (la de OLLAMA_MODELS, la del usuario y, en Linux, la del servicio)."""
+    roots = []
+    if os.environ.get("OLLAMA_MODELS"):
+        roots.append(Path(os.environ["OLLAMA_MODELS"]))
+    roots.append(home() / ".ollama" / "models")
+    if not WINDOWS:
+        roots.append(Path("/usr/share/ollama/.ollama/models"))
+    return roots
+
+
 def find_ffmpeg():
     """Carpeta de ffmpeg: la del PATH o, en Windows, donde lo deja winget (un proceso ya abierto no ve el PATH nuevo)."""
     import glob

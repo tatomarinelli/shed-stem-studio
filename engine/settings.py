@@ -16,6 +16,7 @@ DEFAULTS = {
     "musicFolders": [os.environ["STEMSHED_DEFAULT_MUSIC"]] if os.environ.get("STEMSHED_DEFAULT_MUSIC") else [],
     "llmUrl": os.environ.get("STEMSHED_OLLAMA", "http://127.0.0.1:11500"),
     "audioSources": ["local", "tidal"],   # orden de preferencia para escuchar y separar
+    "llmProvider": "ollama",          # "ollama" o "llamacpp" (llama-server): qué idioma habla el servidor de llmUrl
     "llmModel": "",                   # vacío = el primero instalado
     "recsAuto": True,                 # el motor genera solo el "Disco de hoy" cuando toca
     "recsCadenceHours": 24,           # 24 = uno por día (cambia con la fecha); otro valor = cada N horas
@@ -132,6 +133,10 @@ def validate(patch):
         if u.scheme not in ("http", "https") or u.hostname not in ("127.0.0.1", "localhost", "::1"):
             raise SettingsError("Servidor de modelos: tiene que ser una dirección de esta computadora (http://127.0.0.1:puerto).")
         out["llmUrl"] = f"{u.scheme}://{u.netloc}"
+    if "llmProvider" in patch:
+        if patch["llmProvider"] not in ("ollama", "llamacpp"):
+            raise SettingsError("Tipo de servidor de modelos: opción inválida.")
+        out["llmProvider"] = patch["llmProvider"]
     return out
 
 
