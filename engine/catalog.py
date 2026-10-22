@@ -64,6 +64,7 @@ def load_state():
     try:
         snap = json.loads((_dir() / "tidal.json").read_text())
         _tidal.update(fetchedAt=snap.get("fetchedAt"), albums=snap.get("albums", []), tracks=snap.get("tracks", []), playlists=snap.get("playlists", []))
+        tidal_source.remember_covers(_tidal["albums"])
     except (OSError, ValueError):
         pass
     for pid in EXT_IDS:

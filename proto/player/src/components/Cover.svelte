@@ -3,7 +3,15 @@
   let { title, artist = '', size = 64, radius = 10, src }: { title: string; artist?: string; size?: number; radius?: number; src?: string } = $props();
   let failed = $state(false);
   let loaded = $state(false);
-  $effect(() => { src; failed = false; loaded = false; });
+  // Un fallo suelto (red, motor ocupado) se reintenta dos veces con espera; después queda la portada generada.
+  let tries = $state(0);
+  let timer = 0;
+  $effect(() => { src; failed = false; loaded = false; tries = 0; window.clearTimeout(timer); return () => window.clearTimeout(timer); });
+  const shown = $derived(src && tries ? `${src}${src.includes('?') ? '&' : '?'}r=${tries}` : src);
+  function broke() {
+    if (tries >= 2) { failed = true; return; }
+    timer = window.setTimeout(() => { tries += 1; }, 1500 * (tries + 1));
+  }
   const hash = (s: string) => { let h = 2166136261; for (const c of s) { h ^= c.charCodeAt(0); h = Math.imul(h, 16777619); } return h >>> 0; };
   const p = $derived.by(() => {
     const h = hash(title + '|' + artist);
@@ -19,7 +27,7 @@
       <defs><linearGradient id="h{p.hue}{p.cx}{p.cy}" x1="0" y1="0" x2="1" y2="1" gradientTransform="rotate({p.rot} .5 .5)"><stop offset="0" stop-color="hsl({p.hue} 55% 38%)" /><stop offset="1" stop-color="hsl({p.hue2} 60% 22%)" /></linearGradient></defs>
       <rect width="100" height="100" fill="url(#h{p.hue}{p.cx}{p.cy})" /><circle cx={p.cx} cy={p.cy} r={p.r} fill="hsl({p.hue2} 70% 62%)" opacity="0.55" />
     </svg>
-    <img {src} alt="Portada de {title}" loading="lazy" decoding="async" class:on={loaded} onload={() => (loaded = true)} onerror={() => (failed = true)} />
+    <img src={shown} alt="Portada de {title}" loading="lazy" decoding="async" class:on={loaded} onload={() => (loaded = true)} onerror={broke} />
   </span>
 {:else}
 <svg viewBox="0 0 100 100" width={size} height={size} style="border-radius:{radius}px;flex:none" role="img" aria-label="Portada de {title}">

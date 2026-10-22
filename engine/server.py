@@ -10,6 +10,7 @@ import extart
 import providers
 import ytmusic_unofficial
 import re
+import time
 import ssl
 import sys
 import urllib.error
@@ -39,6 +40,7 @@ import stems  # noqa: E402
 import tidal_source as tidal  # noqa: E402
 import webui  # noqa: E402
 
+_art_failed = {}  # id de disco de TIDAL -> cuándo falló su portada
 ALLOWED_ORIGINS = {"http://127.0.0.1:5173", "http://localhost:5173"}
 ALLOWED_ORIGINS |= {o.strip().rstrip("/") for o in os.environ.get("STEMSHED_ORIGINS", "").split(",") if o.strip()}  # p. ej. el sitio publicado
 HOST = os.environ.get("STEMSHED_HOST", "127.0.0.1")  # en Docker: 0.0.0.0 dentro del contenedor; el puerto se publica solo en loopback
@@ -328,9 +330,12 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(200, sources.pick({k: q[k][0] for k in ("local", "tidal") if k in q and q[k][0]}))
             m = re.fullmatch(r"/engine/albumart/(\d{1,12})", path)
             if m:
+                if time.time() - _art_failed.get(m.group(1), 0) < 300:  # un disco que TIDAL ya no tiene no se vuelve a pedir en cada reintento
+                    return self._send(404, {"error": "no_art", "message": "Sin arte"})
                 try:
                     data = extart.cached_cover(f"tidal:{m.group(1)}", lambda: tidal.album_art(m.group(1)))
                 except Exception:
+                    _art_failed[m.group(1)] = time.time()
                     return self._send(404, {"error": "no_art", "message": "Sin arte"})
                 self.send_response(200)
                 self.send_header("Content-Type", art.content_type(data))

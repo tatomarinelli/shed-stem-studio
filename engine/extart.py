@@ -7,7 +7,8 @@ from pathlib import Path
 
 import settings
 
-HOSTS = ("i.scdn.co", "mosaic.scdn.co", "image-cdn-ak.spotifycdn.com", "i.ytimg.com", "yt3.ggpht.com", "lh3.googleusercontent.com")
+# Dominios de imágenes de cada servicio. Se acepta el dominio y sus subdominios (YouTube Music sirve de yt3, lh3, lh4… .googleusercontent.com).
+HOSTS = ("scdn.co", "spotifycdn.com", "ytimg.com", "ggpht.com", "googleusercontent.com")
 MAX_BYTES = 1_500_000
 TIMEOUT = 15
 _urlopen = urllib.request.urlopen  # las pruebas lo reemplazan
@@ -15,7 +16,8 @@ _urlopen = urllib.request.urlopen  # las pruebas lo reemplazan
 
 def allowed(url):
     p = urllib.parse.urlparse(str(url))
-    return p.scheme == "https" and p.hostname in HOSTS and not p.username and len(str(url)) < 600
+    host = p.hostname or ""
+    return p.scheme == "https" and any(host == h or host.endswith("." + h) for h in HOSTS) and not p.username and len(str(url)) < 600
 
 
 def url_for(thumb):

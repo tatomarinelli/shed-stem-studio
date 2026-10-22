@@ -117,10 +117,36 @@ def album_by_id(album_id):
         return _cached(f"albumid:{album_id}", build, LONG_SECONDS)
 
 
+_covers_filled = {"done": False}
+_fill_lock = threading.Lock()
+_covers = {}  # id de disco -> código de portada que trae el listado de favoritos
+
+
+def remember_covers(albums):
+    """Guarda los códigos de portada del listado (también desde el snapshot en disco). Sirven aunque el disco ya no se pueda pedir por id."""
+    _covers.update({str(a["id"]): a["cover"] for a in albums if a.get("cover")})
+
+
+def cover_url(cover, size=320):
+    return f"https://resources.tidal.com/images/{str(cover).replace('-', '/')}/{size}x{size}.jpg"
+
+
 def album_art(album_id):
     import urllib.request
 
-    url = _get_session().album(int(album_id)).image(320)
+    cover = _covers.get(str(album_id))
+    if not cover:
+        with _fill_lock:  # los pedidos en paralelo esperan a que termine la carga en vez de fallar
+            if not _covers_filled["done"]:
+                # Snapshot viejo (sin códigos de portada): una sola vez se completa desde el listado de favoritos, que además queda en caché.
+                try:
+                    library()
+                except Exception:
+                    pass
+                _covers_filled["done"] = True
+        cover = _covers.get(str(album_id))
+    # Con el código del listado no hace falta pedir el disco: hay discos que TIDAL ya no entrega por id pero siguen en favoritos.
+    url = cover_url(cover) if cover else _get_session().album(int(album_id)).image(320)
     with urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": "ShedStemStudio/0.0.1"}), timeout=20) as r:
         return r.read()
 
@@ -172,13 +198,16 @@ def library():
         return {
             "tracks": [{**_track(t), "savedAt": _saved(t)} for t in tracks],
             "albums": [{"id": str(a.id), "title": a.name, "artist": a.artist.name if a.artist else "",
-                        "year": getattr(a, "year", None), "tracks": getattr(a, "num_tracks", None), "savedAt": _saved(a)}
+                        "year": getattr(a, "year", None), "tracks": getattr(a, "num_tracks", None), "savedAt": _saved(a),
+                        "cover": getattr(a, "cover", None)}
                        for a in albums],
             "artists": [a.name for a in artists],
             "playlists": playlists,
         }
     with _lock:
-        return _cached("library", build, LONG_SECONDS)
+        lib = _cached("library", build, LONG_SECONDS)
+    remember_covers(lib["albums"])
+    return lib
 
 
 def playlist_tracks(playlist_id):

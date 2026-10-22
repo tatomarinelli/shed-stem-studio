@@ -132,7 +132,9 @@ class Covers(unittest.TestCase):
     def test_solo_https_y_dominios_del_servicio(self):
         import extart
         self.assertTrue(extart.allowed("https://i.scdn.co/image/abc"))
-        for bad in ("http://i.scdn.co/x", "https://evil.example/x", "https://i.scdn.co.evil.example/x", "https://user@i.scdn.co/x", "file:///etc/passwd"):
+        self.assertTrue(extart.allowed("https://yt3.googleusercontent.com/abc=w226-h226"))  # el que usa YouTube Music en la práctica
+        self.assertTrue(extart.allowed("https://lh3.googleusercontent.com/abc"))
+        for bad in ("http://i.scdn.co/x", "https://evil.example/x", "https://i.scdn.co.evil.example/x", "https://notgoogleusercontent.com/x", "https://googleusercontent.com.evil.example/x", "https://user@i.scdn.co/x", "file:///etc/passwd"):
             self.assertFalse(extart.allowed(bad), bad)
         self.assertIsNone(extart.url_for("https://evil.example/x"))
         self.assertTrue(extart.url_for("https://i.scdn.co/image/abc").startswith("/engine/extart?u="))
@@ -198,3 +200,48 @@ class Cache(unittest.TestCase):
                 with self.assertRaises(ts.SourceError):
                     ts._get_session()
         self.assertEqual(len(calls), 1)
+
+
+class TidalCovers(unittest.TestCase):
+    def test_portada_sale_del_codigo_del_listado_sin_pedir_el_disco(self):
+        import tidal_source as ts
+        ts.remember_covers([{"id": 42, "cover": "3badd447-feb6-4a0e-8c29-b34fa339686d"}, {"id": 43}])
+        seen = []
+
+        class R:
+            def read(self): return b"\x89PNG"
+            def __enter__(self): return self
+            def __exit__(self, *a): return False
+        import urllib.request
+        with mock.patch.object(ts, "_get_session", side_effect=AssertionError("no debe pedir el disco")), \
+                mock.patch.object(urllib.request, "urlopen", side_effect=lambda req, timeout=0: (seen.append(req.full_url), R())[1]):
+            self.assertEqual(ts.album_art("42"), b"\x89PNG")
+        self.assertEqual(seen, ["https://resources.tidal.com/images/3badd447/feb6/4a0e/8c29/b34fa339686d/320x320.jpg"])
+
+    def test_cover_url(self):
+        import tidal_source as ts
+        self.assertEqual(ts.cover_url("a-b-c", 80), "https://resources.tidal.com/images/a/b/c/80x80.jpg")
+
+    def test_snapshot_viejo_se_completa_una_sola_vez_desde_el_listado(self):
+        import threading
+        import urllib.request
+        import tidal_source as ts
+        loads = []
+
+        def fake_library():
+            loads.append(1)
+            ts.remember_covers([{"id": 7, "cover": "aaaa-bbbb"}])
+            return {"albums": []}
+
+        class R:
+            def read(self): return b"img"
+            def __enter__(self): return self
+            def __exit__(self, *a): return False
+        with mock.patch.dict(ts._covers, {}, clear=True), mock.patch.dict(ts._covers_filled, {"done": False}), \
+                mock.patch.object(ts, "library", side_effect=fake_library), mock.patch.object(urllib.request, "urlopen", return_value=R()):
+            out = []
+            threads = [threading.Thread(target=lambda: out.append(ts.album_art("7"))) for _ in range(5)]
+            [t.start() for t in threads]
+            [t.join() for t in threads]
+        self.assertEqual(out, [b"img"] * 5)  # los 5 pedidos en paralelo reciben la portada
+        self.assertEqual(len(loads), 1)
