@@ -124,7 +124,7 @@
       {:else}
         <ul class="feat">
           <li><Icon name="capas" size={22} /><div><b>Separación en instrumentos</b><span>Guitarra, bajo, batería, piano y voz por separado.</span></div></li>
-          <li><Icon name="enlaces" size={22} /><div><b>Multifuente</b><span>Archivos locales y TIDAL en un solo lugar.</span></div></li>
+          <li><Icon name="enlaces" size={22} /><div><b>Multifuente</b><span>Archivos locales, TIDAL, Spotify y YouTube Music en un solo lugar.</span></div></li>
           <li><Icon name="estrella" size={22} /><div><b>Recomendación basada en contexto y memoria del usuario</b><span>Un disco por período, según tus gustos, la hora y lo que ya escuchaste.</span></div></li>
           <li><Icon name="perfil" size={22} /><div><b>Perfil de gustos</b><span>Para afinar cada recomendación.</span></div></li>
         </ul>

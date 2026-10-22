@@ -229,11 +229,6 @@
     </ol>
   </section>
 
-  <section class="card" id="cuentas">
-    <h3>Cuentas de música</h3>
-    <p class="muted">Spotify y YouTube Music se conectan desde <a href="#/fuentes">Fuentes</a>, con un paso a paso. Solo lectura: nunca escribimos en tu cuenta.</p>
-  </section>
-
   <section class="card">
     <h3>Tu equipo</h3>
     <dl class="hw">

@@ -10,13 +10,20 @@
   let copied = $state(false);
   let headers = $state('');
   let askInstall = $state(false);
+  let method = $state<'own' | 'ext' | 'paste' | 'official'>('own');
+  const methods = [
+    { id: 'own', title: 'Ventana propia', hint: 'Recomendado · 1 clic', needsLib: true },
+    { id: 'ext', title: 'Mi navegador', hint: 'Con extensión', needsLib: true },
+    { id: 'paste', title: 'A mano', hint: 'Pegar encabezados', needsLib: true },
+    { id: 'official', title: 'Oficial', hint: 'Google Cloud', needsLib: false }
+  ] as const;
 
   const spotify = $derived(p.id === 'spotify');
   const waiting = $derived(providers.waiting === p.id);
   const busy = $derived(providers.busy === p.id);
   const stat = $derived(music.status?.providers?.[p.id]);
   const when = (t?: number | null) => (t ? new Date(t * 1000).toLocaleString('es-AR', { dateStyle: 'short', timeStyle: 'short' }) : '');
-  const prot = $derived({ dpapi: 'Sesión cifrada con Windows.', keyring: 'Sesión en el llavero del sistema.', 'file-600': 'Sesión en un archivo solo legible por tu usuario (sin llavero, no está cifrada).' }[p.protection ?? 'file-600']);
+  const prot = $derived({ dpapi: 'cifrada con Windows', keyring: 'en el llavero', 'file-600': 'en un archivo privado, sin cifrar' }[p.protection ?? 'file-600']);
   // El paso activo es el primero que falta: 1 crear la app, 2 pegar los datos, 3 autorizar.
   const step = $derived(p.connected ? 4 : p.configured && !editing ? 3 : 2);
   const canSave = $derived(!!clientId.trim() && (!p.needsSecret || !!clientSecret.trim()) && !busy);
@@ -37,97 +44,102 @@
   }
 </script>
 
-<SourceBlock id={p.id} title={p.label} ok={p.connected} status={p.connected ? 'conectado' : waiting ? 'esperando autorización' : p.configured ? 'listo para conectar' : 'sin conectar'}>
+<SourceBlock id={p.id} title={p.label} ok={p.connected} status={p.connected ? 'conectado' : waiting ? 'esperando…' : p.configured ? 'listo para conectar' : 'sin conectar'}>
   <div data-provider={p.id} class="wiz">
-  {#if p.connected}<div class="actions"><button class="ghost" disabled={busy} onclick={disconnect}>Desconectar</button></div>{/if}
-
   {#if p.connected}
     <dl>
-      {#if spotify}<dt>Álbumes guardados</dt><dd class="num">{stat?.albums ?? 0}</dd>{/if}
-      <dt>Temas guardados</dt><dd class="num">{stat?.tracks ?? 0}</dd>
+      {#if spotify || un?.connected}<dt>Álbumes</dt><dd class="num">{stat?.albums ?? 0}</dd>{/if}
+      <dt>Temas</dt><dd class="num">{stat?.tracks ?? 0}</dd>
     </dl>
     {#if stat?.error}<p class="err" role="alert">{stat.error}</p>{/if}
     <footer>
-      <span class="muted">{stat?.refreshing ? 'Actualizando…' : stat?.fetchedAt ? `Actualizado ${when(stat.fetchedAt)}` : ''}</span>
-      <button class="ghost" onclick={() => music.refresh()} disabled={stat?.refreshing}>Actualizar</button>
+      <span class="muted small">{stat?.refreshing ? 'Actualizando…' : stat?.fetchedAt ? `Actualizado ${when(stat.fetchedAt)}` : ''}</span>
+      <span class="row">
+        <button class="ghost" onclick={() => music.refresh()} disabled={stat?.refreshing}>Actualizar</button>
+        <button class="ghost" disabled={busy} onclick={disconnect}>Desconectar</button>
+      </span>
     </footer>
-    {#if un?.connected}<p class="muted small">Biblioteca completa por ytmusicapi (no oficial). Si deja de actualizar, pegá los encabezados de nuevo. <button class="ghost link" onclick={() => providers.ytAction('headers/clear')}>Quitar</button></p>{/if}
-    <p class="muted small">{prot} Solo lectura: no escribimos en tu cuenta. Desconectar borra la sesión y la copia de tu biblioteca en esta computadora; para revocar el permiso, hacelo desde tu cuenta de {p.label}.</p>
-  {:else}
-    <p class="muted">{spotify ? 'Trae tus álbumes y temas guardados.' : 'Trae tus playlists y los temas con “Me gusta”.'} Solo lectura. {p.note}</p>
-    {#if un}
-      <div class="unof">
-        <b>Biblioteca completa (recomendado)</b>
-        <p class="muted small">Con tu sesión de music.youtube.com trae álbumes guardados, temas y playlists. Usa <b>ytmusicapi</b>, una librería no oficial: puede dejar de andar si YouTube cambia algo. Solo lectura.</p>
-        {#if !un.installed}
-          {#if installing}<p class="muted" role="status">Instalando ytmusicapi…</p>
-          {:else if askInstall}
-            <div class="ask" role="group" aria-label="Confirmar">
-              <p>Va a instalar <b>ytmusicapi</b> con pip en una carpeta propia de la app (unos pocos MB, desde PyPI). No toca nada más.</p>
-              <div class="row"><button class="primary" onclick={install}>Instalar</button><button class="ghost" onclick={() => (askInstall = false)}>Cancelar</button></div>
-            </div>
-          {:else}<button class="primary" onclick={() => (askInstall = true)}>Instalar ytmusicapi…</button>{/if}
-          {#if un.install.state === 'error'}<p class="err" role="alert">{un.install.error}</p>{/if}
-        {:else}
-          <div class="row">
-            {#if waiting}
-              <span class="muted" role="status">Esperando… iniciá sesión en la ventana que se abrió y entrá a tu Biblioteca.</span>
-              <button class="ghost" onclick={() => providers.cancelPairYt()}>Cancelar</button>
-            {:else}
-              <button class="primary" disabled={busy} onclick={() => providers.pairYt(true)}>Conectar</button>
-              <span class="muted small">{un.browser ? `Abre una ventana de ${un.browser} propia de la app: iniciás sesión una vez y listo.` : 'No encontré Chromium, Chrome, Edge ni Brave: usá una de las opciones de abajo.'}</span>
-            {/if}
-          </div>
-          {#if providers.messages.ytmusic}<p class="err" role="alert">{providers.messages.ytmusic}</p>{/if}
-          <details class="off-api"><summary>Otro navegador o a mano</summary>
-            {#if un.extension}
-              <p class="small">Con la extensión: <a href="/engine/ytmusic-extension.zip" download>bajala</a>, cargala en tu navegador y tocá <button class="ghost link" disabled={busy} onclick={() => providers.pairYt(false)}>Conectar desde mi navegador</button>.</p>
-            {/if}
-            <p class="small">O pegá los encabezados:</p>
-          
-          <ol class="mini">
-            <li>Abrí <a href="https://music.youtube.com" target="_blank" rel="noopener noreferrer">music.youtube.com</a> con tu cuenta y las herramientas del navegador (F12) → pestaña <i>Red</i>.</li>
-            <li>Escribí <i>browse</i> en el filtro, tocá cualquier sección de YouTube Music y buscá una petición <i>POST</i> a <code>/youtubei/v1/browse</code>.</li>
-            <li>Copiá los encabezados de esa petición. Firefox: clic derecho → <i>Copiar valor</i> → <i>Copiar encabezados de la petición</i>. Chrome o Edge: en <i>Encabezados</i>, seleccioná todo <i>Request Headers</i> y copialo. Pegalos acá:</li>
-          </ol>
-          <textarea bind:value={headers} rows="4" placeholder="Host: music.youtube.com&#10;Cookie: …&#10;Authorization: SAPISIDHASH …" aria-label="Encabezados de la petición" spellcheck="false" autocomplete="off"></textarea>
-          <div class="row"><button class="primary" disabled={!headers.trim() || busy} onclick={saveHeaders}>{busy ? 'Probando…' : 'Conectar'}</button>
-            <span class="muted small">Se prueba leyendo tu biblioteca y se guarda cifrado. Se hace una sola vez.</span></div>
-          </details>
-        {/if}
+    <p class="muted small">Solo lectura · {prot}{un?.connected ? ' · Si deja de actualizar, volvé a conectar' : ''}</p>
+  {:else if un}
+    {#if !un.installed}
+      <div class="need">
+        <span>Falta <b>ytmusicapi</b> <span class="muted">(~1 MB, pip, carpeta de la app)</span></span>
+        {#if installing}<span class="muted" role="status">Instalando…</span>
+        {:else if askInstall}<span class="row"><button class="primary" onclick={install}>Instalar</button><button class="ghost" onclick={() => (askInstall = false)}>Cancelar</button></span>
+        {:else}<button class="primary" onclick={() => (askInstall = true)}>Instalar</button>{/if}
       </div>
-      <details class="off-api"><summary>Alternativa oficial (Google Cloud): solo playlists y “Me gusta”</summary>
-        {@render stepsList()}
-      </details>
+      {#if un.install.state === 'error'}<p class="err" role="alert">{un.install.error}</p>{/if}
+    {/if}
+
+    <div class="methods" role="radiogroup" aria-label="Cómo conectar">
+      {#each methods as m (m.id)}
+        <button role="radio" aria-checked={method === m.id} class:on={method === m.id} class:dis={m.needsLib && !un.installed} onclick={() => (method = m.id)}>
+          <b>{m.title}</b><span class="muted">{m.hint}</span>
+        </button>
+      {/each}
+    </div>
+
+    {#if method === 'own'}
+      <div class="how">
+        <p>{un.browser ? `Abre ${un.browser} aparte: iniciás sesión y entrás a Biblioteca.` : 'No encontré Chromium, Chrome, Edge ni Brave.'}</p>
+        {@render pairRow(true, !un.installed || !un.browser)}
+      </div>
+    {:else if method === 'ext'}
+      <div class="how">
+        <p>1. <a href="/engine/ytmusic-extension.zip" download>Bajar extensión</a> y cargarla (modo desarrollador).<br />2. Conectar y entrar a Biblioteca.</p>
+        {@render pairRow(false, !un.installed)}
+      </div>
+    {:else if method === 'paste'}
+      <div class="how">
+        <p>En <a href="https://music.youtube.com" target="_blank" rel="noopener noreferrer">music.youtube.com</a>: F12 → Red → filtrá <code>browse</code> → petición POST → copiá los <i>Request Headers</i>.</p>
+        <textarea bind:value={headers} rows="3" placeholder="Host: music.youtube.com&#10;Cookie: …&#10;Authorization: SAPISIDHASH …" aria-label="Encabezados de la petición" spellcheck="false" autocomplete="off"></textarea>
+        <div class="row"><button class="primary" disabled={!headers.trim() || busy || !un.installed} onclick={saveHeaders}>{busy ? 'Probando…' : 'Conectar'}</button></div>
+      </div>
     {:else}
+      <p class="muted small">Solo playlists y “Me gusta”, sin álbumes.</p>
       {@render stepsList()}
     {/if}
+  {:else}
+    <p class="muted small">Álbumes y temas guardados · solo lectura · sin audio</p>
+    {@render stepsList()}
   {/if}
   {#if providers.messages[p.id]}<p class="err" role="alert">{providers.messages[p.id]}</p>{/if}
   </div>
 </SourceBlock>
 
+{#snippet pairRow(launch: boolean, disabled: boolean)}
+  <div class="row">
+    {#if waiting}
+      <span class="spin" aria-hidden="true"></span>
+      <span class="muted" role="status">Esperando la sesión… {launch ? 'iniciá sesión y entrá a Biblioteca' : 'entrá a Biblioteca'}</span>
+      <button class="ghost" onclick={() => providers.cancelPairYt()}>Cancelar</button>
+    {:else}
+      <button class="primary" disabled={busy || disabled} onclick={() => providers.pairYt(launch)}>Conectar</button>
+    {/if}
+  </div>
+{/snippet}
+
 {#snippet stepsList()}
     <ol class="steps">
       <li class:done={step === 3}>
-        <div><b>Creá tu app en {spotify ? 'Spotify' : 'Google'}</b> <span class="muted">(una sola vez)</span></div>
+        <div><b>Creá tu app</b> <span class="muted">(una vez)</span></div>
         {#if step <= 2}
           <div class="how">
             {#if spotify}
-              <p><a href="https://developer.spotify.com/dashboard" target="_blank" rel="noopener noreferrer">Abrir el panel de Spotify</a> → <i>Create app</i>. Poné el nombre que quieras, marcá <i>Web API</i> y pegá esta dirección en <i>Redirect URIs</i>:</p>
+              <p><a href="https://developer.spotify.com/dashboard" target="_blank" rel="noopener noreferrer">Panel de Spotify</a> → <i>Create app</i> → <i>Web API</i>. Pegá esta dirección en <i>Redirect URIs</i>:</p>
             {:else}
-              <p>En Google Cloud: <a href="https://console.cloud.google.com/projectcreate" target="_blank" rel="noopener noreferrer">creá un proyecto</a>, <a href="https://console.cloud.google.com/apis/library/youtube.googleapis.com" target="_blank" rel="noopener noreferrer">activá la YouTube Data API v3</a>, configurá la <a href="https://console.cloud.google.com/apis/credentials/consent" target="_blank" rel="noopener noreferrer">pantalla de consentimiento</a> (tipo Externo, y agregá tu mail como usuario de prueba) y en <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener noreferrer">Credenciales</a> creá un <i>ID de cliente OAuth</i> de tipo <i>Aplicación de escritorio</i>.</p>
+              <p>Google Cloud: <a href="https://console.cloud.google.com/projectcreate" target="_blank" rel="noopener noreferrer">proyecto</a> → <a href="https://console.cloud.google.com/apis/library/youtube.googleapis.com" target="_blank" rel="noopener noreferrer">activar YouTube Data API</a> → <a href="https://console.cloud.google.com/apis/credentials/consent" target="_blank" rel="noopener noreferrer">consentimiento</a> (Externo, tu mail de prueba) → <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener noreferrer">credencial</a> de escritorio. Redirección:</p>
             {/if}
             <div class="copy">
               <input readonly value={p.redirectUri} aria-label="Dirección de redirección" onfocus={e => e.currentTarget.select()} />
               <button class="ghost" onclick={copy}>{copied ? 'Copiada' : 'Copiar'}</button>
             </div>
-            {#if spotify}<p class="muted small">Si Spotify te deja la app en modo desarrollo, agregá tu mail en <i>User Management</i>. Hace falta Premium en la cuenta dueña de la app.</p>{/if}
+            {#if spotify}<p class="muted small">Modo desarrollo: sumá tu mail en <i>User Management</i> (la cuenta dueña necesita Premium).</p>{/if}
           </div>
         {/if}
       </li>
       <li class:done={step === 3} class:off={step < 2}>
-        <b>Pegá los datos de tu app</b>
+        <b>Pegá los datos</b>
         {#if step === 2}
           <div class="form">
             <input bind:value={clientId} placeholder="Client ID" aria-label="Client ID de {p.label}" autocomplete="off" spellcheck="false" />
@@ -140,11 +152,11 @@
         {:else if step === 3}<button class="ghost link" onclick={() => (editing = true)}>Cambiar Client ID</button>{/if}
       </li>
       <li class:off={step < 3}>
-        <b>Autorizá el acceso</b>
+        <b>Autorizá</b>
         {#if step === 3}
           <div class="row">
             {#if waiting}
-              <span class="muted">Esperando que autorices en el navegador…</span>
+              <span class="muted">Esperando que autorices…</span>
               <button class="ghost" onclick={() => providers.cancelWait()}>Cancelar</button>
             {:else}
               <button class="primary" disabled={busy} onclick={() => providers.connect(p.id)}>Conectar {p.label}</button>
@@ -157,7 +169,6 @@
 
 <style>
   .wiz { display: grid; gap: 12px; }
-  .actions { display: flex; justify-content: flex-end; }
   footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
   p { margin: 0; font-size: 13.5px; }
   .small { font-size: 12.5px; }
@@ -168,11 +179,15 @@
   .steps li::before { content: counter(s); position: absolute; left: 0; top: 0; width: 20px; height: 20px; border-radius: 50%; border: 1px solid var(--muted); display: grid; place-items: center; font-size: 12px; }
   .steps li.done::before { content: '✓'; color: #7cc7a3; border-color: #7cc7a3; }
   .steps li.off { opacity: 0.5; }
-  .unof { display: grid; gap: 8px; padding: 10px 12px; border-radius: 10px; background: rgba(255,255,255,0.04); }
-  .unof textarea { font: inherit; font-size: 12px; padding: 6px 8px; border-radius: 8px; border: 1px solid var(--line, #3a332d); background: transparent; color: inherit; resize: vertical; min-width: 0; }
-  .mini { margin: 0; padding-left: 18px; display: grid; gap: 4px; font-size: 13px; }
-  .ask { display: grid; gap: 6px; padding: 8px 10px; border-radius: 8px; background: rgba(255,255,255,0.05); }
-  .off-api summary { cursor: pointer; font-size: 13px; color: var(--muted); margin: 4px 0 8px; }
+  .methods { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px; }
+  .methods button { display: grid; gap: 2px; text-align: left; padding: 8px 10px; border-radius: 10px; background: rgba(255,255,255,0.04); border: 1px solid transparent; font-size: 13px; }
+  .methods button.on { border-color: var(--text); background: rgba(255,255,255,0.09); }
+  .methods button.dis { opacity: 0.55; }
+  .methods .muted { font-size: 11.5px; }
+  .need { display: flex; gap: 10px; align-items: center; justify-content: space-between; flex-wrap: wrap; padding: 8px 10px; border-radius: 10px; background: rgba(255,255,255,0.06); font-size: 13px; }
+  .spin { width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--muted); border-top-color: var(--text); animation: spin 0.9s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .how textarea { font: inherit; font-size: 12px; padding: 6px 8px; border-radius: 8px; border: 1px solid var(--line, #3a332d); background: transparent; color: inherit; resize: vertical; min-width: 0; }
   .how { display: grid; gap: 8px; }
   .how a { color: var(--text); }
   .copy { display: flex; gap: 8px; }

@@ -82,13 +82,17 @@ class Providers {
     this.busy = 'ytmusic'; this.messages.ytmusic = '';
     try {
       const { url, launched } = await this.#post('ytmusic', 'pair', { launch });
-      if (!launched) window.open(url, '_blank', 'noopener,noreferrer');
+      if (!launched) {
+        if (launch) this.messages.ytmusic = 'No pude abrir un navegador propio: abrí YouTube Music en el tuyo (con la extensión).';
+        window.open(url, '_blank', 'noopener,noreferrer');
+      }
       this.waiting = 'ytmusic';
       const until = Date.now() + 10 * 60_000;
       window.clearInterval(this.#poll);
       this.#poll = window.setInterval(async () => {
         await this.load();
-        if (this.list.find(p => p.id === 'ytmusic')?.unofficial?.connected || Date.now() > until) { this.waiting = ''; window.clearInterval(this.#poll); }
+        const got = this.list.find(p => p.id === 'ytmusic')?.unofficial?.connected;
+        if (got || Date.now() > until) { this.waiting = ''; window.clearInterval(this.#poll); if (!got) this.messages.ytmusic = 'No llegó la sesión. Probá de nuevo.'; }
       }, 2000);
     } catch (e) { this.messages.ytmusic = e instanceof Error ? e.message : 'Error'; }
     finally { this.busy = ''; }
