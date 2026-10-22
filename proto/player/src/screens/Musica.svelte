@@ -204,7 +204,7 @@
           <section class="detail" bind:this={detailEl} aria-label="Detalle del álbum">
             <button class="x ghost" onclick={() => (openAlbum = null)} aria-label="Cerrar" title="Cerrar (Esc)">✕</button>
             <div class="ah">
-              <Cover title={openAlbum.title} artist={openAlbum.artist} size={132} radius={12} src={openAlbum.artUrl} />
+              <div class="hc"><Cover title={openAlbum.title} artist={openAlbum.artist} size={132} radius={12} src={openAlbum.artUrl} /></div>
               <div>
                 <h3>{openAlbum.title}</h3>
                 <span class="muted">{openAlbum.artist}{openAlbum.year ? `, ${openAlbum.year}` : ''}</span>
@@ -287,7 +287,10 @@
   .err { color: var(--loop); margin: 0; }
   .detail { grid-column: 1 / -1; position: relative; display: grid; gap: 14px; padding: 18px 20px; border-radius: 18px; background: rgba(255, 255, 255, 0.06); border: 1px solid var(--glass-line); animation: rise 0.3s var(--ease) both; scroll-margin: 70px 0 150px; }
   .x { position: absolute; top: 12px; right: 12px; width: 32px; height: 32px; padding: 0; border-radius: 50%; }
-  .ah { display: flex; gap: 18px; align-items: flex-end; padding-right: 40px; }
+  .ah { display: flex; gap: 18px; align-items: stretch; padding-right: 40px; }
+  /* La portada es un cuadrado de la altura del texto: arranca con el título y termina con los botones. */
+  .hc { aspect-ratio: 1; min-height: 132px; flex: none; }
+  .hc :global(.cv), .hc :global(svg), .hc :global(img) { width: 100% !important; height: 100% !important; display: block; }
   .ah > div { display: grid; gap: 4px; min-width: 0; }
   .ah h3 { margin: 0; font-size: 22px; letter-spacing: -0.01em; }
   .g { font-size: 13px; }
