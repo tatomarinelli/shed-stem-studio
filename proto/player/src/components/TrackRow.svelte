@@ -51,7 +51,7 @@
   {#if compact && n > 0}
     <span class="n muted num">{n}</span>
   {:else}
-    <Cover {title} {artist} size={compact ? 40 : 48} radius={8} src={art ?? (pid ? `/engine/art/${pid}` : undefined)} />
+    <Cover {title} {artist} size={compact ? 44 : 48} radius={8} src={art ?? (pid ? `/engine/art/${pid}` : undefined)} />
   {/if}
   <div class="txt">
     <b>{#if here}<span class="eq" class:still={!going} aria-hidden="true"><i></i><i></i><i></i></span>{/if}{title}{#if badge && !compact} <span class="badge">{badge}</span>{/if}</b>
@@ -126,7 +126,7 @@
   .txt b, .txt span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .dur { font-size: 13px; }
   .badge { font-size: 11.5px; font-weight: 600; color: #7cc7a3; border: 1px solid color-mix(in srgb, #7cc7a3 50%, transparent); border-radius: 999px; padding: 0 8px; margin-left: 6px; vertical-align: 1px; }
-  .track.compact { grid-template-columns: 40px 1fr auto auto; gap: 10px; padding: 5px 8px; }
+  .track.compact { grid-template-columns: 44px 1fr auto auto; gap: 10px; padding: 5px 8px; }
   .track.compact.numbered { grid-template-columns: 22px 1fr auto auto; }
   .n { text-align: right; font-size: 13px; }
   .acts.ic { opacity: 1; align-items: center; gap: 4px; }

@@ -8,7 +8,7 @@
   import Cover from '../components/Cover.svelte';
   import Combo from '../components/Combo.svelte';
   import TrackRow from '../components/TrackRow.svelte';
-  import OpenIn from '../components/OpenIn.svelte';
+  import SourceLogo from '../components/SourceLogo.svelte';
   import { playback, queueItem } from '../lib/playback.svelte';
 
   interface Ids { local?: string; tidal?: string; spotify?: string; ytmusic?: string }
@@ -208,12 +208,14 @@
               <div>
                 <h3>{openAlbum.title}</h3>
                 <span class="muted">{openAlbum.artist}{openAlbum.year ? `, ${openAlbum.year}` : ''}</span>
-                <span class="tags">{#each openAlbum.sources as s (s)}<em>{SRC[s] ?? s}</em>{/each}</span>
+                <span class="tags">{#each openAlbum.sources as s (s)}
+                  {#if openAlbum.links?.[s]}<a class="tag" href={openAlbum.links[s]} target="_blank" rel="noopener noreferrer" title="Abrir en {SRC[s] ?? s}"><SourceLogo id={s} size={12} />{SRC[s] ?? s}<span aria-hidden="true">↗</span></a>
+                  {:else}<em>{SRC[s] ?? s}</em>{/if}
+                {/each}</span>
                 {#if openAlbum.genres.length}<span class="muted g">{openAlbum.genres.join(', ')}</span>{/if}
                 <div class="btns">
                   <button class="primary" onclick={() => playback.playFrom(albumQueue, 0)} disabled={!albumQueue.length}>Escuchar el álbum</button>
                   <button class="ghost" onclick={() => similar({ artist: openAlbum!.artist, album: openAlbum!.title })}>Recomendar parecidos</button>
-                  <OpenIn links={openAlbum.links} />
                 </div>
               </div>
             </div>
@@ -223,7 +225,7 @@
             {:else}
               <ul class="list">
                 {#each albumTracks as x, i (i + x.title)}
-                  <TrackRow compact n={i + 1} title={x.title} artist={x.artist} album={x.album} duration={mm(x.duration)} ids={x.ids} links={x.links} art={openAlbum.artUrl} queue={albumQueue} qi={i} />
+                  <TrackRow compact n={i + 1} title={x.title} artist={x.artist} album={x.album} duration={mm(x.duration)} ids={x.ids} art={openAlbum.artUrl} queue={albumQueue} qi={i} />
                 {:else}<li class="muted">Sin temas.</li>{/each}
               </ul>
             {/if}
@@ -271,6 +273,9 @@
   .line { font-size: 13.5px; }
   .tags { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 3px; }
   em { font-style: normal; font-size: 11px; font-weight: 600; letter-spacing: 0.02em; padding: 1px 8px; border-radius: 999px; border: 1px solid var(--glass-line); color: var(--muted); background: rgba(255,255,255,0.04); }
+  .tag { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 600; letter-spacing: 0.02em; padding: 1px 8px 1px 6px; border-radius: 999px; border: 1px solid var(--glass-line); color: var(--text); background: rgba(255,255,255,0.06); text-decoration: none; }
+  .tag:hover, .tag:focus-visible { background: rgba(255,255,255,0.14); }
+  .tag span { opacity: 0.6; }
   .sk i { height: 12px; border-radius: 6px; background: linear-gradient(90deg, rgba(255,255,255,0.04), rgba(255,255,255,0.12), rgba(255,255,255,0.04)); background-size: 200% 100%; animation: shimmer 1.6s linear infinite; }
   .sk i.s { width: 60%; }
   .sk .art { background: linear-gradient(90deg, rgba(255,255,255,0.04), rgba(255,255,255,0.1), rgba(255,255,255,0.04)); background-size: 200% 100%; animation: shimmer 1.6s linear infinite; box-shadow: none; }
