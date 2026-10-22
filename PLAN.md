@@ -90,6 +90,10 @@ El usuario eligió leer TIDAL con `tidalapi` a través del motor local (`engine/
 
 Dónde viven los datos, los modelos y la música se elige en la pantalla de Ajustes y se guarda en `~/.config/stemshed/settings.json` (carpeta de datos, modelos de recomendación, entorno de separación, carpetas de música, servidor de modelos, modelo en uso). El motor valida cada ruta (absoluta, no del sistema, escribible) y administra su propio Ollama. Ver `docs/settings.md`.
 
+## Spotify y YouTube Music (comienzo)
+
+Base en el motor (interfaz común de proveedores, OAuth PKCE, tokens cifrados, lectura de biblioteca) y conectar/desconectar en Ajustes. Audio no obtenible: se usan archivos locales. Detalle y pendientes en `docs/fuentes-spotify-youtube.md`.
+
 ## Decisiones abiertas
 
 1. Marco de UI (Svelte vs. vanilla).

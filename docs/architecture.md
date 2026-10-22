@@ -44,6 +44,8 @@ Interfaz común: `gustos()`, `colecciones()`, `buscar(q)`, `abrir(item)`, `guard
 | **YouTube / YouTube Music** | Videos con "me gusta" y playlists (API oficial); historial de Music solo vía `ytmusicapi` (no oficial) | OAuth de Google / complemento | Navegador / motor | No |
 | **MusicBrainz, ListenBrainz, Last.fm** | Catálogo abierto e historial abierto | Abierta | Navegador | No |
 
+**Actualización:** Spotify y YouTube Music se conectan desde el motor (no el navegador), con almacén cifrado de tokens; ver `docs/fuentes-spotify-youtube.md`.
+
 A verificar antes de construir: las cuotas y requisitos actuales de las apps de desarrollador de Spotify y Google (los modos de desarrollo suelen limitar los usuarios) y qué cubre hoy la API oficial de TIDAL.
 
 ## 5. "Enviar al estudio" desde una fuente

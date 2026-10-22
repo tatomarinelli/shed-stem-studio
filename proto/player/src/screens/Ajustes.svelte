@@ -2,6 +2,8 @@
   import { onMount } from 'svelte';
   import { settings, type Config } from '../lib/settings.svelte';
   import { tidal } from '../lib/tidal.svelte';
+  import { providers } from '../lib/providers.svelte';
+  import ProviderCard from '../components/ProviderCard.svelte';
   import FolderPicker from '../components/FolderPicker.svelte';
   import Progress from '../components/Progress.svelte';
   import JobNote from '../components/JobNote.svelte';
@@ -15,6 +17,7 @@
   let resOpen = $state(true); // "Recursos" arranca abierto; cerrado, no se sondea
   onMount(() => {
     void settings.load().then(() => settings.syncJobs());
+    void providers.load();
     settings.watchServices(true);
     return () => settings.watchServices(false);
   });
@@ -227,6 +230,14 @@
         </li>
       {/each}
     </ol>
+  </section>
+
+  <section class="card" id="cuentas">
+    <h3>Cuentas de música</h3>
+    <p class="muted">Spotify y YouTube Music aportan tu biblioteca (solo lectura, nunca escribimos en tu cuenta). Su audio no se puede usar para separar: el tema se busca en tus archivos.</p>
+    <ul class="svc">
+      {#each providers.accounts as p (p.id)}<ProviderCard {p} />{/each}
+    </ul>
   </section>
 
   <section class="card">
