@@ -33,3 +33,6 @@ windows/build/stage/
 windows/build/out/
 windows/shell/src-tauri/target/
 windows/shell/src-tauri/gen/
+
+# Versión de Linux: runtime armado y resultados
+linux/build/

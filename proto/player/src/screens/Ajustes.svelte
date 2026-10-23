@@ -261,6 +261,11 @@
     </dl>
   </section>
 
+  <section class="card">
+    <h3>Versión</h3>
+    <p class="muted">Shed Stem Studio {__APP_VERSION__}</p>
+  </section>
+
   <details class="card adv" open ontoggle={e => (resOpen = e.currentTarget.open)}>
     <summary><Icon name="medidor" size={18} /> Recursos</summary>
     {#if resOpen}<ResourceMonitor />{/if}

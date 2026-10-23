@@ -24,7 +24,7 @@
 </script>
 
 <nav aria-label="Secciones" class:collapsed={ui.menuCollapsed}>
-  <div class="brand">{ui.menuCollapsed ? 'S' : 'Shed Stem Studio'}</div>
+  <div class="brand">{ui.menuCollapsed ? 'S' : 'Shed Stem Studio'}<small>v{__APP_VERSION__}</small></div>
   <ul style="--i:{idx}">
     <span class="pill" aria-hidden="true"></span>
     {#each SCREENS as s (s)}
@@ -59,6 +59,7 @@
 <style>
   nav { transition: width 0.3s var(--ease), padding 0.3s var(--ease); overflow: hidden; position: fixed; top: 12px; bottom: 12px; left: 12px; width: var(--menu-w); display: flex; flex-direction: column; gap: 22px; padding: 18px 12px; border-radius: 18px; background: var(--glass); border: 1px solid var(--glass-line); backdrop-filter: blur(20px) saturate(1.3); box-shadow: 0 24px 60px -28px rgba(0,0,0,0.8); z-index: 10; }
   .brand { font-weight: 700; font-size: 20px; letter-spacing: -0.02em; padding: 0 10px; font-variation-settings: 'wdth' 90; }
+  .brand small { display: block; margin-top: 2px; font-size: 11.5px; font-weight: 500; letter-spacing: 0; color: var(--muted); }
   .dl { height: auto; flex: none; display: flex; align-items: center; gap: 8px; margin: 10px 4px 0; padding: 8px 10px; border-radius: 10px; background: rgba(79, 163, 217, 0.12); border: 1px solid rgba(79, 163, 217, 0.35); color: inherit; text-decoration: none; font-size: 13px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
   .act { margin-left: auto; width: 8px; height: 8px; border-radius: 50%; background: #4fa3d9; animation: pulse 1.4s ease-in-out infinite; }
   nav.collapsed .act { position: absolute; top: 8px; right: 10px; margin: 0; }

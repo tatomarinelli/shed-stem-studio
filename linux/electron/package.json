@@ -1,0 +1,15 @@
+{
+  "name": "shed-stem-studio",
+  "productName": "Shed Stem Studio",
+  "description": "Estudiá música con stems separados por IA",
+  "private": true,
+  "version": "0.0.4",
+  "license": "GPL-3.0-or-later",
+  "main": "main.js",
+  "desktopName": "shed-stem-studio.desktop",
+  "scripts": {},
+  "devDependencies": {
+    "@electron/get": "^2.0.3",
+    "electron": "39.8.10"
+  }
+}

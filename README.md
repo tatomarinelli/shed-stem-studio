@@ -52,6 +52,9 @@ El proyecto se llama **Shed Stem Studio** (antes StemShed). Por compatibilidad c
 
 Los comandos de abajo están escritos para Linux (shell tipo bash).
 
+## Release para Linux
+`bash linux/build.sh` arma `linux/build/out/ShedStemStudio-linux-<versión>.tar.gz` (≈ 110 MB: cáscara Electron con su Chromium, interfaz compilada, motor y `tidalapi`; necesita Node, Python 3, rsync y unzip). Para instalarlo: descomprimir y correr `./install.sh`. Queda en `~/.local/opt/shed-stem-studio`, con entrada en el menú y el comando `shedstem`. Abre la app en su propia ventana y apaga el motor al cerrarla; usa el Python 3 del sistema. La versión sale de `proto/player/package.json` y se ve en el menú lateral. Registro del motor: `~/.local/state/shedstemstudio/engine.log`.
+
 ## Requisitos
 
 - Linux con GPU NVIDIA (la separación en CPU funciona pero es muy lenta).
