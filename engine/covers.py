@@ -6,13 +6,15 @@ recomendación, así cuando la pantalla las pide ya están. Las imágenes se gua
 """
 import threading
 import time
+import urllib.error
 import urllib.request
 from pathlib import Path
 
 import settings
 
 UA = "ShedStemStudio/0.0.1 (prototipo local)"
-NEG_TTL = 6 * 3600       # tiempo que se recuerda que un disco no tiene portada
+NEG_TTL = 6 * 3600       # tiempo que se recuerda que un disco no tiene portada (la fuente contestó que no hay)
+RETRY_TTL = 15           # un fallo de red o de TIDAL no es "no hay portada": se vuelve a probar enseguida
 CAA_TIMEOUT = 15
 MIN_BYTES = 800          # menos que esto no es una imagen
 _inflight = {}
@@ -29,20 +31,22 @@ def _read_cache(mbid):
     f = d / f"{mbid}.img"
     if f.is_file():
         return f.read_bytes()
-    n = d / f"{mbid}.none"
-    if n.is_file() and time.time() - n.stat().st_mtime < NEG_TTL:
-        return b""
+    for name, ttl in ((f"{mbid}.none", NEG_TTL), (f"{mbid}.retry", RETRY_TTL)):
+        n = d / name
+        if n.is_file() and time.time() - n.stat().st_mtime < ttl:
+            return b""
     return None
 
 
-def _write(mbid, data):
+def _write(mbid, data, transient=False):
     d = _dir()
     d.mkdir(parents=True, exist_ok=True)
     if data:
         (d / f"{mbid}.img").write_bytes(data)
         (d / f"{mbid}.none").unlink(missing_ok=True)
+        (d / f"{mbid}.retry").unlink(missing_ok=True)
     else:
-        (d / f"{mbid}.none").write_bytes(b"")
+        (d / (f"{mbid}.retry" if transient else f"{mbid}.none")).write_bytes(b"")
 
 
 def _tidal(artist, album):
@@ -89,19 +93,21 @@ def get(mbid, artist=None, album=None):
     try:
         if artist is None:
             artist, album = _meta(mbid)
-        data = None
+        data, transient = None, False  # transient: algo falló (red, sesión, archive.org) y no sabemos si hay portada
         if artist and album:
             try:
                 data = _tidal(artist, album)
             except Exception:
-                data = None
+                transient = True
         if not data or len(data) < MIN_BYTES:
             try:
                 data = _caa(mbid)
+            except urllib.error.HTTPError as e:
+                transient = transient or e.code != 404  # 404 = archive.org dice que no tiene portada
             except Exception:
-                data = None
+                transient = True
         data = data if data and len(data) >= MIN_BYTES else None
-        _write(mbid, data)
+        _write(mbid, data, transient and not data)
         return data
     finally:
         with _lock:

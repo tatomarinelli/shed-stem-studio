@@ -12,6 +12,25 @@ os.environ["STEMSHED_NO_SCHEDULER"] = "1"
 import context as C  # noqa: E402
 import profile as P  # noqa: E402
 import recs as R  # noqa: E402
+
+_module_patches = []
+
+
+def setUpModule():
+    """Sin tocar la configuración ni los datos reales del usuario (ver test_recs.py)."""
+    import tempfile as _t
+    from unittest import mock as _m
+
+    data = _t.mkdtemp(prefix="stemshed-test-data-")
+    for p in (_m.patch.object(R.settings, "load", lambda: dict(R.settings.DEFAULTS)),
+              _m.patch.object(R.settings, "effective", lambda d=None: {**R.settings.DEFAULTS, "dataDir": data})):
+        p.start()
+        _module_patches.append(p)
+
+
+def tearDownModule():
+    while _module_patches:
+        _module_patches.pop().stop()
 from perms import assert_private  # noqa: E402
 
 

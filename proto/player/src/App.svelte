@@ -11,6 +11,8 @@
   import Fuentes from './screens/Fuentes.svelte';
   import Musica from './screens/Musica.svelte';
   import Recomendaciones from './screens/Recomendaciones.svelte';
+  import Agentes from './screens/Agentes.svelte';
+  import Mapa from './screens/Mapa.svelte';
   import Ajustes from './screens/Ajustes.svelte';
   import Inicio from './screens/Inicio.svelte';
   import { setup } from './lib/setup.svelte';
@@ -82,6 +84,8 @@
       {:else if nav.screen === 'fuentes'}<Fuentes />
       {:else if nav.screen === 'musica'}<Musica />
       {:else if nav.screen === 'ajustes'}<Ajustes />
+      {:else if nav.screen === 'agentes'}<Agentes />
+      {:else if nav.screen === 'mapa'}<Mapa />
       {:else}<Recomendaciones />{/if}
     </div>
   {/key}
@@ -92,7 +96,7 @@
 
 <style>
   main { transition: margin-left 0.3s var(--ease); margin-left: calc(var(--menu-w) + 24px); padding: 16px 20px max(140px, calc(var(--bar-h, 0px) + 36px)) 8px; min-height: 100vh; }
-  .screen { max-width: 2200px; display: grid; gap: 16px; align-content: start; animation: rise 0.4s var(--ease) both; }
+  .screen { max-width: 2200px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; align-content: start; animation: rise 0.4s var(--ease) both; }
   .notice { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 10px 14px; margin-bottom: 12px; border-radius: 12px; background: rgba(240, 164, 60, 0.1); border: 1px solid rgba(240, 164, 60, 0.35); max-width: 2200px; }
   .notice span { flex: 1; min-width: 200px; }
   @media (max-width: 760px) { main { margin-left: 0; padding: 12px 12px max(170px, calc(var(--bar-h, 0px) + 120px)); } }

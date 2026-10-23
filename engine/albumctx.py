@@ -172,6 +172,49 @@ def _file(data_dir):
     return Path(data_dir) / "recs" / "albumctx.json"
 
 
+_ext_cache = {}
+
+
+def _ext_file(data_dir):
+    return Path(data_dir) / "recs" / "albumext.json"
+
+
+def extract(mbid, artist, album, data_dir, fetch=True, chars=1200):
+    """Primeros `chars` caracteres del artículo de Wikipedia del disco (evidencia para el clasificador), con caché en disco.
+    None si no hay artículo. Si Wikipedia no respondió no se recuerda el "no hay". Con fetch=False solo mira la caché."""
+    if not _ext_cache:
+        try:
+            _ext_cache.update(json.loads(_ext_file(data_dir).read_text()))
+        except (OSError, ValueError):
+            pass
+    if mbid in _ext_cache:
+        return _ext_cache[mbid] or None
+    if not fetch:
+        return None
+    errors = []
+    art = find_article(artist, album, errors)
+    if not art and errors:
+        return None
+    _ext_cache[mbid] = art["extract"][:chars] if art else ""
+    try:
+        f = _ext_file(data_dir)
+        f.parent.mkdir(parents=True, exist_ok=True)
+        f.write_text(json.dumps(_ext_cache, ensure_ascii=False))
+    except OSError:
+        pass
+    return _ext_cache[mbid] or None
+
+
+def cached(mbid, data_dir):
+    """Contexto ya guardado de un disco (sin consultar nada); None si todavía no se pidió."""
+    if not _cache:
+        try:
+            _cache.update(json.loads(_file(data_dir).read_text()))
+        except (OSError, ValueError):
+            pass
+    return _cache.get(mbid)
+
+
 def get(mbid, artist, album, year, genres, ask, mb_get, data_dir):
     """{text, source: 'wikipedia'|'musicbrainz', url, lang, summarized} (con caché por mbid)."""
     if not _cache:

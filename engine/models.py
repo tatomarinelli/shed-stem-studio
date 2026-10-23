@@ -139,19 +139,38 @@ def openai_models():
     return [{"name": m["id"], "size": 0, "capabilities": ["completion"]} for m in data if m.get("id")]
 
 
-def chat(model, system, user, schema, temperature, num_predict, timeout=600, keep_alive="10m"):
+class _track:
+    """Registra una conexión abierta en `holder` mientras se lee, para poder cortarla desde otro hilo."""
+
+    def __init__(self, holder, resp):
+        self.holder, self.resp = holder, resp
+        if holder is not None:
+            holder.append(resp)
+
+    def __enter__(self):
+        return self.resp
+
+    def __exit__(self, *exc):
+        if self.holder is not None and self.resp in self.holder:
+            self.holder.remove(self.resp)
+        self.resp.close()
+
+
+def chat(model, system, user, schema, temperature, num_predict, timeout=600, keep_alive="10m", holder=None):
     """Un pedido de chat con salida JSON según `schema`, en el idioma de cada servidor.
-    Devuelve (texto, tokens del pedido, tokens generados). La interfaz de llama-server está sin verificar en una máquina real."""
+    Devuelve (texto, tokens del pedido, tokens generados). La interfaz de llama-server está sin verificar en una máquina real.
+    `holder` (lista): recibe la conexión abierta para que otro hilo pueda cortarla (cancelar); el servidor deja de generar."""
     messages = [{"role": "system", "content": system}, {"role": "user", "content": user}]
     if PROVIDER == "ollama":
-        body = {"model": model, "stream": False, "format": schema, "keep_alive": keep_alive, "messages": messages,
+        # think=False: los modelos con razonamiento (qwen3) dejan el contenido vacío si piensan y el JSON no llega; acá no hace falta que piensen.
+        body = {"model": model, "stream": False, "think": False, "format": schema, "keep_alive": keep_alive, "messages": messages,
                 "options": {"temperature": temperature, "num_predict": num_predict}}
-        with _ollama("/api/chat", body, timeout=timeout) as r:
+        with _track(holder, _ollama("/api/chat", body, timeout=timeout)) as r:
             reply = json.load(r)
         return reply["message"]["content"], reply.get("prompt_eval_count"), reply.get("eval_count")
     body = {"model": model, "stream": False, "messages": messages, "temperature": temperature, "max_tokens": num_predict,
             "response_format": {"type": "json_schema", "json_schema": {"name": "respuesta", "strict": True, "schema": schema}}}
-    with _openai("/v1/chat/completions", body, timeout=timeout) as r:
+    with _track(holder, _openai("/v1/chat/completions", body, timeout=timeout)) as r:
         reply = json.load(r)
     usage = reply.get("usage") or {}
     return reply["choices"][0]["message"]["content"], usage.get("prompt_tokens"), usage.get("completion_tokens")

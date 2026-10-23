@@ -6,6 +6,7 @@ Todo lo que viene de afuera (ruta, parámetros, cabeceras) se trata como dato.
 import json
 import os
 import osenv
+import diag
 import extart
 import providers
 import ytmusic_unofficial
@@ -23,10 +24,13 @@ import analysis  # noqa: E402
 import backends  # noqa: E402
 import art  # noqa: E402
 import catalog  # noqa: E402
+import graph  # noqa: E402
 import destinations  # noqa: E402
+import download  # noqa: E402
 import envsetup  # noqa: E402
 import hardware  # noqa: E402
 import library  # noqa: E402
+import lifecycle  # noqa: E402
 import llmdetect  # noqa: E402
 import llmserver  # noqa: E402
 import services  # noqa: E402
@@ -284,6 +288,15 @@ class Handler(BaseHTTPRequestHandler):
             if m:
                 r = analysis.get(m.group(1))
                 return self._send(200, r) if r else self._send(404, {"error": "no_analysis", "message": "Todavía no se analizó este tema."})
+            m = re.fullmatch(rf"/engine/download/{STEM_ID}/status", path)
+            if m:
+                return self._send(200, download.status(m.group(1), urllib.parse.parse_qs(url.query).get("q", ["original"])[0][:20]))
+            if path == "/engine/download/options":
+                return self._send(200, download.options())
+            if path == "/engine/download/batch/status":
+                return self._send(200, {"batch": download.batch_status()})
+            if path == "/engine/downloads":
+                return self._send(200, download.report())
             if path == "/engine/stems/jobs":
                 return self._send(200, stems.jobs_report())
             if path == "/engine/stems/list":
@@ -330,7 +343,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(200, sources.pick({k: q[k][0] for k in ("local", "tidal") if k in q and q[k][0]}))
             m = re.fullmatch(r"/engine/albumart/(\d{1,12})", path)
             if m:
-                if time.time() - _art_failed.get(m.group(1), 0) < 300:  # un disco que TIDAL ya no tiene no se vuelve a pedir en cada reintento
+                if time.time() - _art_failed.get(m.group(1), 0) < 15:  # evita golpear a TIDAL en ráfaga; el cliente reintenta más espaciado
                     return self._send(404, {"error": "no_art", "message": "Sin arte"})
                 try:
                     data = extart.cached_cover(f"tidal:{m.group(1)}", lambda: tidal.album_art(m.group(1)))
@@ -362,6 +375,19 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(200, {"destinations": destinations.listing(), "dryRun": destinations.DRY})
             if path == "/engine/recs/status":
                 return self._send(200, recs.status())
+            if path == "/engine/recs/context":
+                mbid = urllib.parse.parse_qs(url.query).get("mbid", [""])[0]
+                return self._send(200, {"about": recs.album_context(mbid)})
+            if path == "/engine/recs/classifier":
+                return self._send(200, recs.classifier_status())
+            if path == "/engine/graph":
+                return self._send(200, graph.current())
+            if path == "/engine/graph/enrich":
+                return self._send(200, graph.enrich_status())
+            if path == "/engine/recs/memory":
+                return self._send(200, {"facets": recs.memory_facets()})
+            if path == "/engine/recs/genres":
+                return self._send(200, {"genres": recs.genre_suggestions()})
             m = re.fullmatch(r"/engine/cover/([0-9a-f-]{36})", path) or re.fullmatch(rf"/engine/art/{STEM_ID}", path)
             if m:
                 data = recs.cover(m.group(1)) if path.startswith("/engine/cover/") else art.for_track(m.group(1))
@@ -487,6 +513,36 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/engine/open-folder":
                 body = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))) or b"{}")
                 return self._send(200, services.open_folder(str(body.get("key", ""))))
+            if path in ("/engine/download/batch/start", "/engine/download/batch/cancel", "/engine/download/estimate"):
+                size = int(self.headers.get("Content-Length", 0))
+                if size > 262144:
+                    return self._send(413, {"error": "too_large", "message": "Pedido demasiado grande"})
+                body = json.loads(self.rfile.read(size) or b"{}")
+                if not isinstance(body, dict):
+                    return self._send(400, {"error": "params", "message": "Pedido inválido"})
+                if path.endswith("/cancel"):
+                    return self._send(200, download.batch_cancel("current" if body.get("mode") == "current" else "all"))
+                if path.endswith("/estimate"):
+                    return self._send(200, download.estimate(body.get("items") if isinstance(body.get("items"), list) else [], str(body.get("quality", "original")), body.get("profile") == "ipod"))
+                # baja varios temas en serie: solo con el clic del usuario, con su propia sesión de TIDAL
+                return self._send(200, download.batch_start(body.get("items"), str(body.get("quality", "original")), body.get("profile"), body.get("folders") is True))
+            m = re.fullmatch(rf"/engine/download/{STEM_ID}/(start|cancel)", path)
+            if m:  # baja el tema a un archivo: solo con el clic del usuario, con su propia sesión de TIDAL
+                if m.group(2) == "cancel":
+                    return self._send(200, download.cancel(m.group(1)))
+                size = int(self.headers.get("Content-Length", 0))
+                body = json.loads(self.rfile.read(size) or b"{}") if 0 < size <= 1024 else {}
+                body = body if isinstance(body, dict) else {}
+                return self._send(200, download.start(m.group(1), str(body.get("quality", "original")), body.get("profile")))
+            if path == "/engine/reveal":
+                size = int(self.headers.get("Content-Length", 0))
+                body = json.loads(self.rfile.read(size) or b"{}") if 0 < size <= 2048 else {}
+                if not isinstance(body, dict):
+                    return self._send(400, {"error": "params", "message": "Pedido inválido"})
+                tid = body.get("id")
+                if tid is not None and not (isinstance(tid, str) and re.fullmatch(STEM_ID, tid)):
+                    return self._send(400, {"error": "params", "message": "Tema inválido."})
+                return self._send(200, download.reveal(body.get("path"), tid, body.get("original") is True, str(body["quality"])[:30] if body.get("quality") else None))
             m = re.fullmatch(rf"/engine/stems/{STEM_ID}/cancel", path)
             if m:
                 return self._send(200, stems.cancel(m.group(1)))
@@ -532,7 +588,7 @@ class Handler(BaseHTTPRequestHandler):
                 res = destinations.save(body.get("kind"), body.get("items"), body.get("destinations"), body.get("name"),
                                         recs.MEM_DIR / "saved.jsonl")
                 return self._send(200, {"results": res, "dryRun": destinations.DRY})
-            if path in ("/engine/recs/generate", "/engine/recs/reaction", "/engine/recs/profile", "/engine/recs/schedule", "/engine/recs/presets"):
+            if path in ("/engine/recs/generate", "/engine/recs/cancel", "/engine/recs/observation", "/engine/recs/estimate", "/engine/diag/cover", "/engine/recs/reaction", "/engine/recs/profile", "/engine/recs/schedule", "/engine/recs/presets"):
                 size = int(self.headers.get("Content-Length", 0))
                 if size > 8192:
                     return self._send(413, {"error": "too_large", "message": "Pedido demasiado grande"})
@@ -541,8 +597,16 @@ class Handler(BaseHTTPRequestHandler):
                     return self._send(400, {"error": "params", "message": "Pedido inválido"})
                 if path == "/engine/recs/generate":
                     return self._send(200, recs.start(body.get("kind", "daily"), body))
+                if path == "/engine/diag/cover":
+                    return self._send(200, {"ok": diag.cover(body)})
+                if path == "/engine/recs/estimate":
+                    return self._send(200, {"estimate": recs.estimate(body)})
+                if path == "/engine/recs/observation":
+                    return self._send(200, {"facets": recs.set_observation(body.get("id"), body.get("status"))})
+                if path == "/engine/recs/cancel":
+                    return self._send(200, recs.cancel())
                 if path == "/engine/recs/reaction":
-                    return self._send(200, {"reactions": recs.set_reaction(body.get("key"), body.get("reaction"))})
+                    return self._send(200, {"reactions": recs.set_reaction(body.get("key"), body.get("reaction"), body.get("reason"), body.get("known"))})
                 if path == "/engine/recs/profile":
                     return self._send(200, {"profile": recs.save_profile(body)})
                 if path == "/engine/recs/presets":
@@ -550,6 +614,8 @@ class Handler(BaseHTTPRequestHandler):
                 patch = {k: v for k, v in (("recsAuto", body.get("auto")), ("recsCadenceHours", body.get("cadenceHours"))) if v is not None}
                 settings.save(patch)
                 return self._send(200, {"schedule": recs.schedule_info()})
+            if path == "/engine/graph/enrich":
+                return self._send(200, graph.enrich_start())
             if path == "/engine/library/rescan":
                 library.scan()
                 return self._send(200, {"ok": True})
@@ -573,7 +639,7 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(404, {"error": "not_found", "message": "Ruta desconocida"})
         except settings.SettingsError as e:
             return self._send(400, {"error": "settings", "message": str(e)})
-        except (stems.StemsError, analysis.AnalysisError, envsetup.EnvError, llmserver.LlmServerError, llmdetect.DetectError, services.OpenError, ValueError) as e:
+        except (stems.StemsError, analysis.AnalysisError, envsetup.EnvError, llmserver.LlmServerError, llmdetect.DetectError, services.OpenError, download.DownloadError, download.RevealError, ValueError) as e:
             return self._send(409, {"error": "stems", "message": str(e)})
         except providers.ProviderError as e:
             return self._send(e.status if 400 <= e.status < 600 else 409, {"error": e.code, "message": e.message})
@@ -597,6 +663,7 @@ if __name__ == "__main__":
     port = int(sys.argv[1]) if len(sys.argv) > 1 else 8770
     osenv.use_bundled_ca()  # Windows: certificados de certifi además del almacén del sistema (PC recién instalada)
     osenv.kill_children_on_exit()  # Windows: los procesos hijos mueren con el motor
+    lifecycle.start()  # Linux y macOS: lo mismo (señales, salida normal y limpieza de hijos de un cierre brusco); antes de lanzar el Ollama propio
     osenv.ensure_ffmpeg_on_path()  # audio-separator lo necesita; en Windows lo instala winget fuera del PATH de este proceso
     apply_settings()
     models.ensure_ollama()
@@ -613,4 +680,8 @@ if __name__ == "__main__":
     print(f"Motor de Shed Stem Studio en http://{HOST}:{port}", flush=True)
     httpd = ThreadingHTTPServer((HOST, port), Handler)
     services.bind(httpd, HOST, port, ALLOWED_ORIGINS)
-    httpd.serve_forever()
+    lifecycle.bind(httpd)
+    try:
+        httpd.serve_forever()
+    finally:
+        lifecycle.cleanup()  # no deja Ollama, llama-server, separación ni ffmpeg huérfanos

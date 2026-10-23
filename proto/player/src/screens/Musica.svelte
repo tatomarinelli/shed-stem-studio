@@ -9,6 +9,8 @@
   import Combo from '../components/Combo.svelte';
   import TrackRow from '../components/TrackRow.svelte';
   import SourceLogo from '../components/SourceLogo.svelte';
+  import DownloadBar from '../components/DownloadBar.svelte';
+  import { downloads, type Pick } from '../lib/downloads.svelte';
   import { playback, queueItem } from '../lib/playback.svelte';
 
   interface Ids { local?: string; tidal?: string; spotify?: string; ytmusic?: string }
@@ -42,6 +44,29 @@
   let openAlbum = $state<Album | null>(null);
   let albumTracks = $state<{ title: string; artist: string; album: string; duration: number; ids: Ids; links?: Record<string, string> }[] | null>(null);
   let albumError = $state('');
+
+  // Selección para descargar varios temas: vale para la lista de temas o para el álbum abierto.
+  let selecting = $state(false);
+  let picked = $state<Record<string, boolean>>({});
+  const trackKey = (x: Track) => x.key + JSON.stringify(x.ids);
+  const albumKey = (x: { title: string }, i: number) => i + x.title;
+  const albumOpen = $derived(!!(openAlbum && albumTracks));
+  const scope = $derived.by((): { key: string; pick: Pick }[] => {
+    const pick = (x: { title: string; artist: string; album: string; duration: number; ids: Ids }): Pick =>
+      ({ ids: { local: x.ids.local, tidal: x.ids.tidal }, artist: x.artist, title: x.title, album: x.album, seconds: x.duration || undefined });
+    if (albumOpen) return albumTracks!.map((x, i) => ({ key: albumKey(x, i), pick: pick(x) }));
+    return kind === 'tracks' ? items.map(it => ({ key: trackKey(asTrack(it)), pick: pick(asTrack(it)) })) : [];
+  });
+  const picks = $derived(scope.filter(x => picked[x.key]).map(x => x.pick));
+  const canSelect = $derived(albumOpen || kind === 'tracks');
+  // Al cambiar de lista (otro álbum, otra vista) la selección empieza de cero.
+  $effect(() => { kind; openAlbum?.key; untrack(() => (picked = {})); });
+  $effect(() => { if (!canSelect) untrack(() => (selecting = false)); });
+  async function pickAll() {
+    if (!albumOpen) while (items.length < total && items.length < 1000 && !failed) await load(false);   // hasta 1000 temas: se siguen leyendo las páginas
+    picked = Object.fromEntries(scope.map(x => [x.key, true]));
+  }
+  const toggle = (k: string, on: boolean) => { picked = { ...picked, [k]: on }; };
 
   let t = 0;
   $effect(() => { const q = query; window.clearTimeout(t); t = window.setTimeout(() => (debounced = q.trim()), 250); return () => window.clearTimeout(t); });
@@ -177,6 +202,7 @@
   <div class="count muted num">
     {#if !loading && !failed}{total} {kind === 'albums' ? (total === 1 ? 'álbum' : 'álbumes') : (total === 1 ? 'tema' : 'temas')}{/if}
     {#if filtered}<button class="link" onclick={clear}>Limpiar filtros</button>{/if}
+    {#if kind === 'tracks' && !albumOpen && items.length}<button class="link" onclick={() => (selecting = !selecting)} aria-pressed={selecting}>{selecting ? 'Salir de la selección' : 'Seleccionar'}</button>{/if}
   </div>
 
   {#if failed}
@@ -216,6 +242,7 @@
                 <div class="btns">
                   <button class="primary" onclick={() => playback.playFrom(albumQueue, 0)} disabled={!albumQueue.length}>Escuchar el álbum</button>
                   <button class="ghost" onclick={() => similar({ artist: openAlbum!.artist, album: openAlbum!.title })}>Recomendar parecidos</button>
+                  <button class="ghost" onclick={() => (selecting = !selecting)} aria-pressed={selecting} disabled={!albumTracks}>{selecting ? 'Salir de la selección' : 'Seleccionar'}</button>
                 </div>
               </div>
             </div>
@@ -225,7 +252,7 @@
             {:else}
               <ul class="list">
                 {#each albumTracks as x, i (i + x.title)}
-                  <TrackRow compact n={i + 1} title={x.title} artist={x.artist} album={x.album} duration={mm(x.duration)} ids={x.ids} art={openAlbum.artUrl} queue={albumQueue} qi={i} />
+                  <TrackRow compact n={i + 1} title={x.title} artist={x.artist} album={x.album} duration={mm(x.duration)} ids={x.ids} art={openAlbum.artUrl} queue={albumQueue} qi={i} select={selecting} checked={!!picked[albumKey(x, i)]} onpick={on => toggle(albumKey(x, i), on)} />
                 {:else}<li class="muted">Sin temas.</li>{/each}
               </ul>
             {/if}
@@ -237,11 +264,14 @@
     <ul class="list">
       {#each items as it (it.key + JSON.stringify(asTrack(it).ids))}
         {@const x = asTrack(it)}
-        <TrackRow compact title={x.title} artist={x.artist} album={x.album} meta={x.album} duration={mm(x.duration)} ids={x.ids} links={x.links} art={x.artUrl} badge={badge(x.sources)} />
+        <TrackRow compact title={x.title} artist={x.artist} album={x.album} meta={x.album} duration={mm(x.duration)} ids={x.ids} links={x.links} art={x.artUrl} badge={badge(x.sources)} select={selecting} checked={!!picked[trackKey(x)]} onpick={on => toggle(trackKey(x), on)} />
       {/each}
     </ul>
   {/if}
   <div bind:this={sentinel} class="sentinel muted">{more ? 'Cargando más…' : ''}</div>
+  {#if (selecting && canSelect) || downloads.batch}
+    <DownloadBar {picks} total={albumOpen ? albumTracks?.length ?? 0 : total} onall={pickAll} onnone={() => (picked = {})} onclose={() => (selecting = false)} />
+  {/if}
 {/if}
 
 <svelte:window onkeydown={e => { if (e.key === 'Escape' && openAlbum && !(e.target instanceof HTMLElement && e.target.matches('input, select, textarea'))) openAlbum = null; }} />

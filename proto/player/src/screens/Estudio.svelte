@@ -9,6 +9,9 @@
   import Cover from '../components/Cover.svelte';
   import SectionChips from '../components/SectionChips.svelte';
   import AnalysisBar from '../components/AnalysisBar.svelte';
+  import DownloadMenu from '../components/DownloadMenu.svelte';
+  import DownloadBar from '../components/DownloadBar.svelte';
+  import { downloads, type Pick } from '../lib/downloads.svelte';
   import { analysis } from '../lib/analysis.svelte';
   import { untrack } from 'svelte';
 
@@ -18,11 +21,15 @@
   let confirming = $state('');
   let failed = $state('');
   let listOpen = $state(true);
+  // Selección para bajar varios temas de la lista (el audio original, en la calidad elegida).
+  let selecting = $state(false);
+  let picked = $state<Record<string, boolean>>({});
 
   const size = (b: number) => (b >= 1e9 ? `${(b / 1e9).toFixed(1)} GB` : `${Math.max(1, Math.round(b / 1e6))} MB`);
   const norm = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
   const shown = $derived(stemlist.items.filter(i => !query || norm(`${i.title} ${i.artist}`).includes(norm(query))));
   const totals = $derived(stemlist.totals);
+  const picks = $derived(shown.filter(t => picked[t.id]).map((t): Pick => ({ id: t.id, artist: t.artist, title: t.title, seconds: t.duration ?? undefined })));
   const ready = $derived(player.status === 'ready' && !!player.track);
 
   // Al cambiar de tema se busca su análisis; cuando está, los pulsos van al motor de audio (click).
@@ -45,6 +52,7 @@
       <div class="top">
         <h3>Descargados</h3>
         <span class="muted num">{totals.count}</span>
+        {#if totals.count}<button class="ghost" onclick={() => { selecting = !selecting; picked = {}; }} aria-pressed={selecting}>{selecting ? 'Salir' : 'Seleccionar'}</button>{/if}
         {#if ready}<button class="ghost" onclick={() => (listOpen = false)} aria-label="Ocultar la lista">Ocultar</button>{/if}
       </div>
       {#if separation.active.length}
@@ -66,7 +74,8 @@
       <ul>
         {#each shown as t (t.id)}
           {@const active = ready && player.track?.id === t.id}
-          <li class:active>
+          <li class:active class:selrow={selecting}>
+            {#if selecting}<input class="pick" type="checkbox" checked={!!picked[t.id]} onchange={e => (picked = { ...picked, [t.id]: e.currentTarget.checked })} aria-label="Elegir {t.title}" />{/if}
             <button class="row" onclick={() => player.load(t.id)} disabled={player.status === 'loading'} aria-current={active ? 'true' : undefined}>
               <Cover title={t.title} artist={t.artist} size={40} radius={8} src="/engine/art/{t.id}" />
               <span class="txt"><b>{t.title}</b><span class="muted">{t.artist}</span></span>
@@ -97,6 +106,9 @@
         {/each}
       </ul>
       {#if failed}<p class="warn" role="alert">{failed}</p>{/if}
+      {#if selecting || downloads.batch}
+        <DownloadBar inline {picks} total={shown.length} onall={() => { picked = Object.fromEntries(shown.map(t => [t.id, true])); }} onnone={() => (picked = {})} onclose={() => { selecting = false; picked = {}; }} />
+      {/if}
       <p class="foot muted num">{size(totals.writable)} propios{totals.readonly ? `, ${size(totals.readonly)} anteriores` : ''}</p>
     </aside>
   {/if}
@@ -110,6 +122,7 @@
           <div class="nt"><b>{player.track.title}</b><span class="muted">{player.track.artist}</span></div>
         </div>
         <SectionChips />
+        <div class="dl"><DownloadMenu ids={[player.track.id]} resolve={async () => player.track?.id ?? null} localId={/^L/.test(player.track.id) ? player.track.id : undefined} localOnly={/^L/.test(player.track.id)} /></div>
       </div>
       <AnalysisBar />
       <Stack />
@@ -153,6 +166,9 @@
   ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
   li { display: grid; border-radius: 12px; transition: background 0.2s; }
   li:hover { background: rgba(255,255,255,0.05); }
+  li.selrow { grid-template-columns: 24px 1fr; align-items: center; }
+  li.selrow > :nth-child(n+3) { grid-column: 2; }
+  .pick { width: 18px; height: 18px; margin: 0 0 0 6px; accent-color: #7cc7a3; }
   li.active { background: rgba(124, 199, 163, 0.12); box-shadow: inset 0 0 0 1px color-mix(in srgb, #7cc7a3 50%, transparent); }
   .row { display: grid; grid-template-columns: 40px 1fr auto; align-items: center; gap: 10px; text-align: left; padding: 6px 8px; background: transparent; border: 0; border-radius: 12px; width: 100%; }
   .txt { display: grid; min-width: 0; }
@@ -171,6 +187,7 @@
   .head { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
   .now { display: flex; align-items: center; gap: 14px; animation: rise 0.5s var(--ease) both; }
   .nt { display: grid; }
+  .dl { margin-left: auto; }
   .now b { font-size: 28px; font-weight: 700; letter-spacing: -0.02em; line-height: 1.1; }
   .empty { padding: 8vh 0 0; max-width: 540px; display: grid; gap: 10px; animation: rise 0.6s var(--ease) both; }
   .empty p { margin: 0; }

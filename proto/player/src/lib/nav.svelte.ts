@@ -1,5 +1,5 @@
-export type Screen = 'fuentes' | 'musica' | 'recomendaciones' | 'estudio' | 'ajustes';
-export const SCREENS: Screen[] = ['fuentes', 'musica', 'recomendaciones', 'estudio', 'ajustes'];
+export type Screen = 'fuentes' | 'musica' | 'recomendaciones' | 'agentes' | 'mapa' | 'estudio' | 'ajustes';
+export const SCREENS: Screen[] = ['fuentes', 'musica', 'recomendaciones', 'agentes', 'mapa', 'estudio', 'ajustes'];
 
 const fromHash = (): Screen => {
   const h = location.hash.replace('#/', '') as Screen;

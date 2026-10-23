@@ -134,25 +134,26 @@ def declared(data):
     return {"artists": data.get("essentials", []), "genres": data.get("loves", [])}
 
 
-def describe(data):
-    """Texto corto para el prompt y para memory.md. Solo lo que el usuario escribió."""
+def describe(data, skip=()):
+    """Texto corto para el prompt y para memory.md. Solo lo que el usuario escribió. `skip`: partes que no van según el tipo de pedido
+    (instrument, pace, improve, loves, essentials): un pedido "parecido a este disco" no necesita que toque guitarra ni lo que quiere mejorar."""
     if not filled(data):
         return LEGACY
     parts = []
-    if data["instrument"]:
+    if data["instrument"] and "instrument" not in skip:
         parts.append(f"Toca {data['instrument']}" + (f", nivel {data['level']}" if data["level"] else "") + ".")
-    if data["improve"]:
+    if data["improve"] and "improve" not in skip:
         parts.append("Quiere mejorar: " + ", ".join(IMPROVE_LABEL[x] for x in data["improve"]) + ".")
-    if data["loves"]:
+    if data["loves"] and "loves" not in skip:
         parts.append("Ama: " + ", ".join(data["loves"]) + ".")
     if data["avoids"]:
         parts.append("Evita: " + ", ".join(data["avoids"]) + ".")
-    if data["essentials"]:
+    if data["essentials"] and "essentials" not in skip:
         parts.append("Imprescindibles: " + ", ".join(data["essentials"]) + ".")
     parts.append({"discos": "Escucha discos enteros.", "temas": "Escucha temas sueltos.", "ambos": "Escucha discos y temas sueltos."}[data["listening"]])
     parts.append({"nada": "No quiere salir de su zona.", "algo": "Quiere conocer algo de música nueva.",
                   "mucho": "Quiere conocer mucha música nueva."}[data["discovery"]])
-    if data["pace"]:
+    if data["pace"] and "pace" not in skip:
         parts.append(f"Estudia unos {data['pace']} minutos por día.")
     if data["notes"]:
         parts.append(f"Notas suyas: {data['notes']}")

@@ -20,6 +20,7 @@ Interfaz y textos en español rioplatense (voseo), cortos y sin verbosidad.
 - Motor: `cd engine && python3 -m unittest discover -s tests`.
 - Interfaz: `cd proto/player && npx svelte-check --tsconfig ./tsconfig.json`.
 - Interfaz con clics reales y sin ventana: `proto/tools/uicheck.py`.
+- Portadas al salir y volver a una pantalla (que no queden cargadas pero invisibles): `proto/tools/covercheck.py`.
 
 ## Notas locales
 Las preferencias personales y las rutas de la máquina de quien desarrolla van en `CLAUDE.local.md` (no se versiona).

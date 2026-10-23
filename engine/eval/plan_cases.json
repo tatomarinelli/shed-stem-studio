@@ -1,0 +1,491 @@
+{
+ "about": "Pedidos escritos como los de un guitarrista argentino. Etiquetas hechas a mano por quien arma la medición; mood admite varias respuestas válidas; null = el pedido no lo dice.",
+ "profile": {
+  "instrument": "guitarra",
+  "level": "avanzado",
+  "loves": [
+   "jazz",
+   "rock"
+  ]
+ },
+ "cases": [
+  {
+   "text": "algo para tocar de noche que no sea tan pesado, de los 70",
+   "era": [
+    1970,
+    1979
+   ],
+   "mood": [
+    "tranquilo",
+    "melancolico",
+    "romantico"
+   ],
+   "instrumental": null,
+   "countries": [],
+   "canon": false,
+   "refs": [],
+   "genres": [],
+   "language": null
+  },
+  {
+   "text": "discos de Argentina que tengo que haber escuchado",
+   "era": null,
+   "mood": null,
+   "instrumental": null,
+   "countries": [
+    "AR"
+   ],
+   "canon": true,
+   "refs": [],
+   "genres": [],
+   "language": null
+  },
+  {
+   "text": "parecido a Spinetta pero más jazz",
+   "era": null,
+   "mood": null,
+   "instrumental": null,
+   "countries": [],
+   "canon": false,
+   "refs": [
+    "Spinetta"
+   ],
+   "genres": [
+    "jazz"
+   ],
+   "language": null,
+   "note": "Spinetta es argentino pero el pedido no pide país"
+  },
+  {
+   "text": "música tranquila sin voz para trabajar",
+   "era": null,
+   "mood": [
+    "tranquilo"
+   ],
+   "instrumental": true,
+   "countries": [],
+   "canon": false,
+   "refs": [],
+   "genres": [],
+   "language": null
+  },
+  {
+   "text": "jazz de los 60 con guitarra, nada eléctrico",
+   "era": [
+    1960,
+    1969
+   ],
+   "mood": null,
+   "instrumental": null,
+   "countries": [],
+   "canon": false,
+   "refs": [],
+   "genres": [
+    "jazz"
+   ],
+   "language": null
+  },
+  {
+   "text": "algo bien arriba para el gimnasio, rock de los 90",
+   "era": [
+    1990,
+    1999
+   ],
+   "mood": [
+    "energico",
+    "alegre"
+   ],
+   "instrumental": null,
+   "countries": [],
+   "canon": false,
+   "refs": [],
+   "genres": [
+    "rock"
+   ],
+   "language": null
+  },
+  {
+   "text": "discos de bossa nova brasileña de los 60 y 70",
+   "era": [
+    1960,
+    1979
+   ],
+   "mood": null,
+   "instrumental": null,
+   "countries": [
+    "BR"
+   ],
+   "canon": false,
+   "refs": [],
+   "genres": [
+    "bossa nova"
+   ],
+   "language": null
+  },
+  {
+   "text": "los discos fundamentales del rock nacional",
+   "era": null,
+   "mood": null,
+   "instrumental": null,
+   "countries": [
+    "AR"
+   ],
+   "canon": true,
+   "refs": [],
+   "genres": [
+    "rock"
+   ],
+   "language": null,
+   "note": "'nacional' = argentino para este usuario; las reglas no lo ven"
+  },
+  {
+   "text": "quiero escuchar algo melancólico, tipo Nick Drake",
+   "era": null,
+   "mood": [
+    "melancolico",
+    "tranquilo"
+   ],
+   "instrumental": null,
+   "countries": [],
+   "canon": false,
+   "refs": [
+    "Nick Drake"
+   ],
+   "genres": [],
+   "language": null
+  },
+  {
+   "text": "fusión de jazz de los 80 con buenos solos de guitarra",
+   "era": [
+    1980,
+    1989
+   ],
+   "mood": null,
+   "instrumental": null,
+   "countries": [],
+   "canon": false,
+   "refs": [],
+   "genres": [
+    "jazz fusion"
+   ],
+   "language": null
+  },
+  {
+   "text": "música para bailar, cumbia de Colombia",
+   "era": null,
+   "mood": [
+    "alegre",
+    "energico"
+   ],
+   "instrumental": null,
+   "countries": [
+    "CO"
+   ],
+   "canon": false,
+   "refs": [],
+   "genres": [
+    "cumbia"
+   ],
+   "language": null
+  },
+  {
+   "text": "algo instrumental de guitarra, estilo Pat Metheny",
+   "era": null,
+   "mood": null,
+   "instrumental": true,
+   "countries": [],
+   "canon": false,
+   "refs": [
+    "Pat Metheny"
+   ],
+   "genres": [],
+   "language": null
+  },
+  {
+   "text": "folklore argentino de los 70 que sea clásico",
+   "era": [
+    1970,
+    1979
+   ],
+   "mood": null,
+   "instrumental": null,
+   "countries": [
+    "AR"
+   ],
+   "canon": true,
+   "refs": [],
+   "genres": [
+    "folk"
+   ],
+   "language": null
+  },
+  {
+   "text": "un disco de jazz reciente, de los últimos años",
+   "era": [
+    2018,
+    2030
+   ],
+   "mood": null,
+   "instrumental": null,
+   "countries": [],
+   "canon": false,
+   "refs": [],
+   "genres": [
+    "jazz"
+   ],
+   "language": null,
+   "eraTol": 5,
+   "note": "época difusa: se acepta ±5 años"
+  },
+  {
+   "text": "rock progresivo de los 70 que cante en inglés",
+   "era": [
+    1970,
+    1979
+   ],
+   "mood": null,
+   "instrumental": null,
+   "countries": [],
+   "canon": false,
+   "refs": [],
+   "genres": [
+    "progressive rock"
+   ],
+   "language": "ingles"
+  },
+  {
+   "text": "algo tranquilo para el domingo que cante en portugués",
+   "era": null,
+   "mood": [
+    "tranquilo",
+    "alegre",
+    "romantico"
+   ],
+   "instrumental": null,
+   "countries": [],
+   "canon": false,
+   "refs": [],
+   "genres": [],
+   "language": "portugues"
+  },
+  {
+   "text": "no sé, sorprendeme",
+   "era": null,
+   "mood": null,
+   "instrumental": null,
+   "countries": [],
+   "canon": false,
+   "refs": [],
+   "genres": [],
+   "language": null
+  },
+  {
+   "text": "discos enteros para escuchar en el auto",
+   "era": null,
+   "mood": null,
+   "instrumental": null,
+   "countries": [],
+   "canon": false,
+   "refs": [],
+   "genres": [],
+   "language": null
+  },
+  {
+   "text": "algo oscuro y pesado, metal de los 80",
+   "era": [
+    1980,
+    1989
+   ],
+   "mood": [
+    "oscuro",
+    "energico"
+   ],
+   "instrumental": null,
+   "countries": [],
+   "canon": false,
+   "refs": [],
+   "genres": [
+    "metal"
+   ],
+   "language": null
+  },
+  {
+   "text": "música uruguaya, candombe y murga",
+   "era": null,
+   "mood": null,
+   "instrumental": null,
+   "countries": [
+    "UY"
+   ],
+   "canon": false,
+   "refs": [],
+   "genres": [
+    "candombe"
+   ],
+   "language": null
+  },
+  {
+   "text": "jazz de Estados Unidos de los 50, lo esencial",
+   "era": [
+    1950,
+    1959
+   ],
+   "mood": null,
+   "instrumental": null,
+   "countries": [
+    "US"
+   ],
+   "canon": true,
+   "refs": [],
+   "genres": [
+    "jazz"
+   ],
+   "language": null
+  },
+  {
+   "text": "bandas francesas de rock psicodélico de los 60",
+   "era": [
+    1960,
+    1969
+   ],
+   "mood": null,
+   "instrumental": null,
+   "countries": [
+    "FR"
+   ],
+   "canon": false,
+   "refs": [],
+   "genres": [
+    "psychedelic rock"
+   ],
+   "language": null,
+   "note": "'francesas' no está en las formas de intent.COUNTRIES"
+  },
+  {
+   "text": "algo como Pink Floyd pero argentino",
+   "era": null,
+   "mood": null,
+   "instrumental": null,
+   "countries": [
+    "AR"
+   ],
+   "canon": false,
+   "refs": [
+    "Pink Floyd"
+   ],
+   "genres": [],
+   "language": null
+  },
+  {
+   "text": "jazz modal sin letra para estudiar armonía",
+   "era": null,
+   "mood": null,
+   "instrumental": true,
+   "countries": [],
+   "canon": false,
+   "refs": [],
+   "genres": [
+    "modal jazz"
+   ],
+   "language": null
+  },
+  {
+   "text": "algo romántico con voz, cantautores españoles de los 80",
+   "era": [
+    1980,
+    1989
+   ],
+   "mood": [
+    "romantico"
+   ],
+   "instrumental": false,
+   "countries": [
+    "ES"
+   ],
+   "canon": false,
+   "refs": [],
+   "genres": [],
+   "language": null
+  },
+  {
+   "text": "lo mejor de Charly García",
+   "era": null,
+   "mood": null,
+   "instrumental": null,
+   "countries": [],
+   "canon": true,
+   "refs": [
+    "Charly García"
+   ],
+   "genres": [],
+   "language": null
+  },
+  {
+   "text": "indie de los 2000 que no sea muy conocido",
+   "era": [
+    2000,
+    2009
+   ],
+   "mood": null,
+   "instrumental": null,
+   "countries": [],
+   "canon": false,
+   "refs": [],
+   "genres": [
+    "indie"
+   ],
+   "language": null
+  },
+  {
+   "text": "que suene a verano, reggae de los 80",
+   "era": [
+    1980,
+    1989
+   ],
+   "mood": [
+    "alegre",
+    "tranquilo"
+   ],
+   "instrumental": null,
+   "countries": [],
+   "canon": false,
+   "refs": [],
+   "genres": [
+    "reggae"
+   ],
+   "language": null
+  },
+  {
+   "text": "jazz de la década de 1960 pero de Inglaterra",
+   "era": [
+    1960,
+    1969
+   ],
+   "mood": null,
+   "instrumental": null,
+   "countries": [
+    "GB"
+   ],
+   "canon": false,
+   "refs": [],
+   "genres": [
+    "jazz"
+   ],
+   "language": null
+  },
+  {
+   "text": "algo triste para escuchar cuando llueve",
+   "era": null,
+   "mood": [
+    "melancolico",
+    "tranquilo"
+   ],
+   "instrumental": null,
+   "countries": [],
+   "canon": false,
+   "refs": [],
+   "genres": [],
+   "language": null
+  }
+ ]
+}

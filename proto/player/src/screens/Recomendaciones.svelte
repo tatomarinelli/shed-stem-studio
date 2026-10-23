@@ -1,23 +1,19 @@
 <script lang="ts">
   import { onMount, tick } from 'svelte';
-  import { recs, type Item, type Mode, type Reaction, type RecsResult } from '../lib/recs.svelte';
+  import { recs, REACTION_LABELS, type Item, type DiscType, type Mode, type Reaction, type RecsResult } from '../lib/recs.svelte';
   import { seed } from '../lib/seed.svelte';
   import AlbumCard from '../components/recs/AlbumCard.svelte';
   import Cover from '../components/Cover.svelte';
   import ProfileForm from '../components/recs/ProfileForm.svelte';
   import PresetsEditor from '../components/recs/PresetsEditor.svelte';
   import PresetWizard from '../components/recs/PresetWizard.svelte';
+  import TagInput from '../components/recs/TagInput.svelte';
+  import Working from '../components/recs/Working.svelte';
+  import MemoryPanel from '../components/recs/MemoryPanel.svelte';
   import { schedule as scheduleText } from '../lib/presetText';
 
 
-  const steps: Record<string, string> = {
-    profile: 'Leyendo tus gustos…',
-    model: 'Pensando discos con el modelo local…',
-    verify: 'Verificando en MusicBrainz…',
-    wait_mb: 'Esperando turno en MusicBrainz…',
-    context: 'Buscando el contexto de cada disco…',
-  };
-  const labels: Record<Reaction, string> = { heard: 'Ya lo escuché', loved: 'Me encantó', no: 'No me va' };
+  const labels = REACTION_LABELS;
   const cadences = [[6, 'cada 6 h'], [12, 'cada 12 h'], [24, 'una vez por día'], [48, 'cada 2 días'], [72, 'cada 3 días'], [168, 'una vez por semana']] as const;
   const modes: { id: Mode; label: string }[] = [
     { id: 'estudiar', label: 'Estudiar' }, { id: 'concentrarme', label: 'Concentrarme' }, { id: 'sorprenderme', label: 'Sorprenderme' },
@@ -27,8 +23,21 @@
   let showPresets = $state(false);
   let showWizard = $state(false);
   const HOW: Record<string, string> = { horario: 'por horario', defecto: 'por defecto', elegido: 'elegido por vos' };
-  const presetName = $derived(recs.presets?.presets.find(p => p.id === recs.presetChoice)?.name);
   let ask = $state('');
+  let genres = $state<string[]>([]);
+  let strict = $state(true);
+  let discType = $state<DiscType | ''>('');
+  const types: { id: DiscType | ''; label: string }[] = [{ id: '', label: 'Cualquiera' }, { id: 'album', label: 'Álbum' }, { id: 'ep', label: 'EP' }, { id: 'live', label: 'En vivo' }];
+  const cancelling = $derived(recs.message === 'Cancelando…');
+  let estTimer = 0;
+  $effect(() => {
+    const body = { prompt: ask.trim(), genres: [...genres], mode };
+    window.clearTimeout(estTimer);
+    estTimer = window.setTimeout(() => recs.loadEstimate(body), 400);
+    return () => window.clearTimeout(estTimer);
+  });
+  const estText = $derived(recs.estimate ? `≈ ${recs.estimate.total} s` : '');
+  const estTip = $derived(recs.estimate ? `Modelo ≈ ${Math.round(recs.estimate.parts.model)} s · MusicBrainz ≈ ${Math.round(recs.estimate.parts.musicbrainz)} s${recs.estimate.parts.context ? ` · contexto ≈ ${Math.round(recs.estimate.parts.context)} s` : ''} (${recs.estimate.basis})` : '');
   let mode = $state<Mode | null>(null);
   let undo = $state<{ item: Item; label: string } | null>(null);
   let undoTimer = 0;
@@ -44,6 +53,7 @@
   let runningSeed = $state<{ artist: string; album?: string; title?: string } | null>(null);
 
   onMount(async () => {
+    recs.loadGenres();
     await recs.load();
     // Llegó desde Música con "Recomendar parecidos": se muestra el pedido y arranca solo.
     if (seed.value) {
@@ -69,8 +79,8 @@
     else if (seenRunning && st === 'error') { runningSeed = null; seenRunning = false; }
   });
 
-  async function react(item: Item, r: Reaction) {
-    if (await recs.react(item.mbid, r)) {
+  async function react(item: Item, r: Reaction, known: boolean) {
+    if (await recs.react(item.mbid, r, known)) {
       undo = { item, label: labels[r] };
       window.clearTimeout(undoTimer);
       undoTimer = window.setTimeout(() => (undo = null), 8000);
@@ -83,11 +93,11 @@
   async function request(e: SubmitEvent) {
     e.preventDefault();
     runningSeed = seed.value;
-    if (!(await recs.generate('request', { prompt: ask.trim(), mode, seed: seed.value })) ) runningSeed = null;
+    if (!(await recs.generate('request', { prompt: ask.trim(), mode, seed: seed.value, ...(genres.length ? { genres, strict } : {}), ...(discType ? { type: discType } : {}) })) ) runningSeed = null;
   }
   const when = (t: number) => new Date(t * 1000).toLocaleString('es-AR', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
   const day = (iso: string) => new Date(iso).toLocaleDateString('es-AR', { day: 'numeric', month: 'short' });
-  const reqText = (r: RecsResult) => [r.request?.mode, r.request?.prompt && `“${r.request.prompt}”`, r.request?.seed && `parecido a ${r.request.seed.artist}`].filter(Boolean).join(' · ');
+  const reqText = (r: RecsResult) => [r.request?.genres?.length && `género: ${r.request.genres.join(', ')}${r.request.genresDetected ? ' (detectado)' : ''}${r.request.strict ? '' : ' (flexible)'}`, r.request?.mode, r.request?.prompt && `“${r.request.prompt}”`, r.request?.seed && `parecido a ${r.request.seed.artist}`, r.request?.zone && `zona del mapa: ${r.request.zone.names.join(' + ')} (${r.request.zone.artists} artistas)`].filter(Boolean).join(' · ');
 </script>
 
 <div class="head">
@@ -120,11 +130,13 @@
 
 {#if recs.presets && recs.activePreset}
   <div class="preset">
-    <span>Perfil: <b>{presetName ?? recs.activePreset.name}</b> <span class="muted">· {presetName ? HOW.elegido : HOW[recs.activePreset.how]}</span></span>
-    <select aria-label="Usar otro perfil" bind:value={recs.presetChoice}>
-      <option value="">automático ({recs.activePreset.name})</option>
-      {#each recs.presets.presets as p (p.id)}<option value={p.id}>{p.name} · {scheduleText(p)}</option>{/each}
-    </select>
+    <label class="plabel">Perfil
+      <select aria-label="Perfil de recomendación" bind:value={recs.presetChoice}>
+        <option value="">Automático · ahora {recs.activePreset.name} ({HOW[recs.activePreset.how]})</option>
+        {#each recs.presets.presets as p (p.id)}<option value={p.id}>{p.name} · {scheduleText(p)}</option>{/each}
+      </select>
+    </label>
+    <span class="grow"></span>
     <button class="ghost" onclick={() => { showPresets = !showPresets; showWizard = false; showProfile = false; }} aria-expanded={showPresets}>Editar perfiles</button>
     <button class="ghost" onclick={() => { showWizard = !showWizard; showPresets = false; showProfile = false; }} aria-expanded={showWizard}>+ Nuevo</button>
   </div>
@@ -151,21 +163,27 @@
 <section class="sec">
   <div class="sec-head">
     <h4>Disco de hoy</h4>
-    {#if recs.schedule}
-      <select aria-label="Cada cuánto" value={recs.schedule.cadenceHours} onchange={e => recs.setSchedule({ cadenceHours: +e.currentTarget.value })}>
-        {#each cadences as [h, l] (h)}<option value={h}>{l}</option>{/each}
-      </select>
-      <label class="check"><input type="checkbox" checked={recs.schedule.auto} onchange={e => recs.setSchedule({ auto: e.currentTarget.checked })} /> automático</label>
-    {/if}
+    {#if recs.daily}<span class="muted small meta">{recs.daily.preset ? `${recs.daily.preset.name} · ` : ''}{when(recs.daily.createdAt)}</span>{/if}
     <span class="grow"></span>
-    {#if recs.daily}<span class="muted small">{recs.daily.preset ? `${recs.daily.preset.name} · ` : ''}{when(recs.daily.createdAt)}</span>{/if}
-    <button class="ghost" onclick={() => recs.generate('daily')} disabled={recs.state === 'running' || recs.state === 'no_engine'}>{recs.daily ? 'Otro' : 'Generar'}</button>
+    <button class="ghost" onclick={() => recs.generate('daily')} disabled={recs.state === 'running' || recs.state === 'no_engine'}>{recs.daily ? 'Recomendar otro' : 'Generar'}</button>
   </div>
+  {#if recs.schedule}
+    <div class="sched muted small">
+      <label>Nuevo disco
+        <select aria-label="Cada cuánto" value={recs.schedule.cadenceHours} onchange={e => recs.setSchedule({ cadenceHours: +e.currentTarget.value })}>
+          {#each cadences as [h, l] (h)}<option value={h}>{l}</option>{/each}
+        </select>
+      </label>
+      <label class="check"><input type="checkbox" checked={recs.schedule.auto} onchange={e => recs.setSchedule({ auto: e.currentTarget.checked })} /> automático</label>
+    </div>
+  {/if}
 
   {#if running('daily')}
-    <div class="working" role="status"><p>{steps[recs.step] ?? 'Trabajando…'}</p><div class="bar"><i></i></div></div>
+    <Working step={recs.step} done={recs.done} total={recs.total} found={recs.found} target={recs.target} {cancelling} oncancel={() => recs.cancel()} />
   {:else if recs.state === 'error' && recs.kind === 'daily'}
     <p class="warn" role="alert">{recs.message}</p>
+  {:else if recs.message && recs.kind === 'daily' && (recs.state === 'done' || recs.state === 'idle')}
+    <p class="muted small" role="status">{recs.message}</p>
   {/if}
 
   {#if daily.length}
@@ -177,7 +195,7 @@
       </div>
     {/if}
   {:else if recs.daily && !running('daily')}
-    <p class="muted">{recs.daily.pick ? 'Ya clasificaste todos. Pedí otro.' : 'Ningún disco pasó la verificación. Probá con Otro.'}</p>
+    <p class="muted">{recs.daily.pick ? 'Ya clasificaste todos. Tocá Recomendar otro.' : 'Ningún disco pasó la verificación. Probá con Recomendar otro.'}</p>
   {:else if !recs.daily && !running('daily') && recs.state !== 'no_engine'}
     <p class="muted">Todavía no hay disco de hoy.{recs.schedule?.auto ? ' Se genera solo cuando el modelo local está prendido.' : ''}</p>
   {/if}
@@ -200,8 +218,23 @@
         <button type="button" class:on={mode === m.id} aria-pressed={mode === m.id} onclick={() => (mode = mode === m.id ? null : m.id)}>{m.label}</button>
       {/each}
     </div>
-    <button class="primary" type="submit" disabled={recs.state === 'running' || recs.state === 'no_engine' || (!ask.trim() && !mode && !seed.value)}>{running('request') ? 'Buscando…' : 'Buscar'}</button>
+    <button class="primary" type="submit" disabled={recs.state === 'running' || recs.state === 'no_engine' || (!ask.trim() && !mode && !seed.value && !genres.length)}>{running('request') ? 'Buscando…' : 'Buscar'}</button>
+    {#if estText && !running('request')}<span class="est muted small" title={estTip}>{estText}</span>{/if}
   </form>
+  <details class="tune">
+    <summary>Afinar{genres.length || discType ? ` · ${[...genres, discType && types.find(t => t.id === discType)?.label].filter(Boolean).join(', ')}` : ''}</summary>
+    <div class="tune-body">
+      <TagInput label="Género" bind:value={genres} suggestions={recs.genreList} placeholder="dub, bossa nova, post-rock…" max={3} />
+      {#if genres.length}
+        <label class="check"><input type="checkbox" bind:checked={strict} /> Solo discos de ese género (si no alcanzan, muestro menos)</label>
+      {/if}
+      <div class="seg" role="group" aria-label="Tipo de disco">
+        {#each types as t (t.id)}
+          <button type="button" class:on={discType === t.id} aria-pressed={discType === t.id} onclick={() => (discType = t.id)}>{t.label}</button>
+        {/each}
+      </div>
+    </div>
+  </details>
   {#if seed.value && !running('request')}
     <div class="seedcard">
       <Cover title={seed.value.album ?? seed.value.title ?? seed.value.artist} artist={seed.value.artist} size={56} radius={10} />
@@ -213,14 +246,13 @@
   {#if running('request')}
     <div class="seedcard run" role="status" aria-live="polite">
       {#if runningSeed}<Cover title={runningSeed.album ?? runningSeed.title ?? runningSeed.artist} artist={runningSeed.artist} size={56} radius={10} />{/if}
-      <div class="st">
-        <b>{runningSeed ? `Buscando discos parecidos a ${[runningSeed.artist, runningSeed.album ?? runningSeed.title].filter(Boolean).join(' · ')}` : 'Buscando lo que pediste'}</b>
-        <span class="muted">{steps[recs.step] ?? 'Trabajando…'}</span>
-        <div class="bar"><i></i></div>
-      </div>
+      <Working title={runningSeed ? `Buscando discos parecidos a ${[runningSeed.artist, runningSeed.album ?? runningSeed.title].filter(Boolean).join(' · ')}` : 'Buscando lo que pediste'}
+        step={recs.step} done={recs.done} total={recs.total} found={recs.found} target={recs.target} {cancelling} oncancel={() => recs.cancel()} />
     </div>
   {:else if recs.state === 'error' && recs.kind === 'request'}
     <p class="warn" role="alert">{recs.message}</p>
+  {:else if recs.message && recs.kind === 'request' && (recs.state === 'done' || recs.state === 'idle')}
+    <p class="muted small" role="status">{recs.message}</p>
   {/if}
 
   {#if recs.request && !running('request')}
@@ -248,6 +280,8 @@
     </ul>
   </details>
 {/if}
+
+<MemoryPanel />
 
 {#if recs.daily || recs.request}
   {@const r = (recs.request && (!recs.daily || recs.request.createdAt > recs.daily.createdAt) ? recs.request : recs.daily)!}
@@ -283,18 +317,21 @@
   .seedbox { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
   .sec { display: grid; gap: 10px; }
   .sec-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; min-height: 34px; }
-  .sec-head select { padding: 4px 9px; font-size: 13.5px; }
   .grow { flex: 1; }
+  .meta { white-space: nowrap; }
+  .sched { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-top: -4px; }
+  .sched label { display: flex; align-items: center; gap: 8px; }
+  .sched select { padding: 3px 8px; font-size: 13px; }
+  .plabel { display: flex; align-items: center; gap: 8px; color: var(--muted); min-width: 0; flex: 1 1 260px; max-width: 100%; }
+  .plabel select { flex: 1; min-width: 0; max-width: 460px; text-overflow: ellipsis; }
   .small { font-size: 13px; margin: 0; }
   .check { display: flex; align-items: center; gap: 6px; font-size: 13.5px; color: var(--muted); cursor: pointer; }
   .check input { accent-color: var(--text); }
   .alts { display: grid; gap: 0; padding-left: 8px; }
   .alts > p { margin: 4px 0 2px 12px; }
-  .working { display: grid; gap: 8px; max-width: 520px; padding: 14px 0; }
-  .working p { margin: 0; font-size: 18px; font-weight: 600; }
-  .bar { height: 5px; border-radius: 3px; background: var(--line); overflow: hidden; }
-  .bar i { display: block; height: 100%; width: 40%; border-radius: 3px; background: linear-gradient(90deg, #f0a43c, #ff4d8d, #4fa3d9); animation: slide 1.4s var(--ease) infinite; }
-  @keyframes slide { from { transform: translateX(-100%); } to { transform: translateX(260%); } }
+  .est { white-space: nowrap; cursor: help; }
+  .tune summary { cursor: pointer; color: var(--muted); font-size: 13.5px; width: fit-content; }
+  .tune-body { display: grid; gap: 12px; margin-top: 10px; max-width: 560px; }
   .warn { color: #f0a43c; margin: 0; }
   .undo { position: sticky; bottom: 110px; z-index: 5; justify-self: start; display: flex; align-items: center; gap: 12px; padding: 8px 10px 8px 16px; border-radius: 12px; background: #1e3035; border: 1px solid var(--glass-line); box-shadow: 0 16px 40px -16px rgba(0, 0, 0, 0.8); animation: rise 0.3s var(--ease) both; }
   .ask { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
@@ -313,10 +350,12 @@
   .hist { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 2px; }
   .hist li { display: grid; grid-template-columns: 1fr auto auto auto auto; gap: 12px; align-items: center; padding: 4px 0; }
   .hist .t { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  @media (max-width: 600px) { .hist li { grid-template-columns: minmax(0, 1fr) auto auto; } .hist li > :nth-child(3), .hist li > :nth-child(4) { display: none; } }
   .hist button { padding: 3px 10px; font-size: 13px; }
   .tag { font-size: 12px; border-radius: 999px; padding: 1px 9px; border: 1px solid var(--glass-line); }
-  .tag.loved { color: var(--loop); border-color: color-mix(in srgb, var(--loop) 45%, transparent); }
-  .tag.heard { color: #7cc7a3; border-color: color-mix(in srgb, #7cc7a3 45%, transparent); }
+  .tag.loved { color: #7cc7a3; border-color: color-mix(in srgb, #7cc7a3 45%, transparent); font-weight: 600; }
+  .tag.liked, .tag.heard { color: #7cc7a3; border-color: color-mix(in srgb, #7cc7a3 45%, transparent); }
+  .tag.disliked { color: #f0a43c; border-color: color-mix(in srgb, #f0a43c 45%, transparent); }
   .tag.no { color: var(--muted); }
   .disc { list-style: none; padding: 0; margin: 8px 0; display: grid; gap: 4px; font-size: 14px; }
   pre { white-space: pre-wrap; background: rgba(0, 0, 0, 0.25); border-radius: 10px; padding: 10px 12px; font-size: 12.5px; line-height: 1.5; max-height: 260px; overflow: auto; }

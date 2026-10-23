@@ -10,7 +10,7 @@ Recordar la historia y los gustos del usuario **sin que el contexto del modelo c
 
 | Archivo | Qué guarda | Quién lo escribe | Tope |
 |---|---|---|---|
-| `events.jsonl` | Eventos crudos **del usuario**: reacciones (`heard`/`loved`/`no`/`clear` = deshacer) y discos mostrados (`shown`). Cada uno lleva fecha, disco (mbid, artista, título), géneros de MusicBrainz y el **perfil de sugerencia** con que se generó (contexto, por si después conviene separar memorias por perfil). Solo se agrega al final. | motor | 60 días o 300 líneas; lo más viejo se compacta |
+| `events.jsonl` | Eventos crudos **del usuario**: reacciones (`loved`/`liked`/`disliked`/`no`/`clear` = deshacer; `heard` es el viejo "Ya lo escuché", solo lectura; el `no` puede llevar `reason`) y discos mostrados (`shown`). Cada uno lleva fecha, disco (mbid, artista, título), géneros de MusicBrainz y el **perfil de sugerencia** con que se generó (contexto, por si después conviene separar memorias por perfil). Solo se agrega al final. | motor | 60 días o 300 líneas; lo más viejo se compacta |
 | `taste.json` | Lo técnico. Pesos agregados por **artista** y **género**, cada uno `{w, at}` (peso medido en la fecha `at`), más `known`: los discos ya clasificados, para no repetirlos. | motor (compactación) | pesos < 0,05 se podan; `known` ≤ 400 |
 | `profile.json` | Cuestionario (perfil declarado), contexto opt-in (hora/día, ciudad → Open-Meteo) y lo importado del cliente anterior (`imported`, marcado como no verificado). | usuario (Mi perfil) y el importador de una sola vez | campos con tope de largo |
 | `presets.json` | Perfiles de sugerencia por horario (intención, días y horas, prioridad, novedad, estilos a favorecer o evitar, referencias, consigna, "manda sobre"). | usuario | 8 perfiles, 6 rangos cada uno |
@@ -49,6 +49,36 @@ Perfil declarado (texto corto), top 12 artistas y top 10 géneros con peso, top 
 | **3. Clasificador LLM anclado** (mistral-nemo, JSON con probabilidades de uso: estudiar, concentrarme, sorprenderme, libre; e instrumental) | Entrada: solo géneros de MusicBrainz y el texto ya validado de Wikipedia; 10 discos × 3 corridas | Misma respuesta en las 3 corridas: **2 de 10**. Diferencia media de probabilidades: 0,21. "Instrumental" salta de 0 a 0,7 en el mismo disco | **Descartada**. No hay suficientes reacciones reales (2) para medir acuerdo con el usuario |
 | **4. Open-Jev-2B** (gionebeats/Open-Jev-2B) | Lectura de la ficha | Apache-2.0, pero es un adaptador LoRA sobre Qwen3.5-2B (la base, de varios GB, aparte). Necesita el loader propio e instalar Transformers 5.10.2 + PEFT + torch (`pip install -e '.[train]'`). No está entrenado en música | **Descartada**: pide paquetes nuevos en un entorno compartido y una descarga que pasa el presupuesto de < 1 GB |
 | openjev/openjev (JEV 27B) | Investigado antes | 27B (~54 GB), licencia CC BY-NC 4.0, decisiones sobre texto, páginas y capturas; no es de música y no entra cómodo en 16 GB | **Descartada**. Idea que sí se tomó: pedir respuestas **estructuradas con un esquema JSON** (Ollama `format`) y un campo `confianza` 0-100 |
+
+## Memoria por temas (facetas)
+
+Además de los tres archivos de arriba, el motor deriva cada vez que cambia algo una carpeta `memory/` con **una faceta por tema**, en JSON
+(para el motor y para el mapa visual) y en Markdown (para leerla). Nunca es la fuente de verdad: se regenera desde `events.jsonl`,
+`taste.json` y `profile.json` (`engine/facets.py`), así que se puede borrar sin perder nada.
+
+| Faceta | Qué tiene |
+|---|---|
+| `identity` | Instrumento, nivel, banda propia (`ownArtists`), cómo escucha. Lo declarado por el usuario. |
+| `taste` | Artistas, géneros y décadas con su peso actual (ya con decaimiento) y de dónde sale cada uno. Sin la banda propia. |
+| `avoid` | Estilos que evita (perfil), discos que descartó y los estilos que **confirmó** evitar desde una observación. |
+| `habits` | Mostrados por perfil, reacciones por tipo, cuánto de lo clasificado ya conocía. |
+| `learning` | Qué quiere mejorar (con el texto de lo que se le busca) e instrumento. |
+| `observations` | Hipótesis con **evidencia** (ids de discos) y confianza, para confirmar o rechazar. |
+| `graph` | Nodos (artistas, géneros, discos, observaciones) y aristas (`by`, `has-genre`, `subgenre-of`, `evidence`) para el mapa visual. |
+
+`observation-states.json` guarda lo que el usuario decidió de cada observación (`confirmed` / `rejected`).
+
+**Observaciones.** Las arma el código con reglas, nunca el modelo: un género con 3 o más reacciones y al menos 75 % del mismo signo, un
+artista con 2 "Me encantó", o "ya conocías la mitad de lo reciente". Cada una cita los discos que la sostienen y dice qué efecto tiene.
+Respetan la regla de **reacciones por ítem, nunca por género**: una observación negativa ("seguís descartando X") se muestra pero **no cambia
+pesos ni llega sola al modelo**; solo si el usuario la confirma pasa a la lista de estilos a evitar.
+
+**Qué entra al prompt.** Lo mismo de antes (perfil, gustos, reacciones recientes) más los estilos confirmados. El resto de las facetas es para
+mostrarle al usuario qué se sabe de él y para el mapa.
+
+**Reacciones.** `loved` (Me encantó, +3,0 al artista y +1,0 a cada género), `liked` (Me gusta, +1,5 / +0,5), `disliked` (No me gustó: excluye el
+disco y resta 0,5 solo a ese artista, nada a los géneros), `no` (No me interesa: solo excluye) y el viejo `heard` (solo lectura, "Lo conocía").
+El evento puede llevar `known: true` ("Ya lo conocía") y, en un `no`, un `reason` (`off_genre`, `seen`, `off_request`) que no cuenta como gusto.
 
 ## Resumen en lenguaje natural
 

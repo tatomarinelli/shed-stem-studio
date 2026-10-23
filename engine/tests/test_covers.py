@@ -61,3 +61,51 @@ class Covers(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TransientFailures(unittest.TestCase):
+    """Un fallo de red o de TIDAL no se recuerda horas como "no hay portada": se vuelve a probar enseguida."""
+
+    def setUp(self):
+        import os
+        import urllib.error
+
+        self.os, self.urlerror = os, urllib.error
+        self.tmp = tempfile.mkdtemp()
+        p = mock.patch.object(covers.settings, "effective", return_value={"dataDir": self.tmp})
+        p.start()
+        self.addCleanup(p.stop)
+
+    def files(self, suffix):
+        from pathlib import Path
+
+        return Path(self.tmp, "covers", f"{MB}.{suffix}")
+
+    def test_network_error_is_retried_soon_not_remembered_for_hours(self):
+        def boom(*a):
+            raise OSError("sin red")
+
+        with mock.patch.object(covers, "_tidal", boom), mock.patch.object(covers, "_caa", boom):
+            self.assertIsNone(covers.get(MB, "A", "B"))
+        self.assertTrue(self.files("retry").exists())
+        self.assertFalse(self.files("none").exists())
+        self.os.utime(self.files("retry"), (0, 0))  # pasó el tiempo corto: se vuelve a probar
+        with mock.patch.object(covers, "_tidal", return_value=IMG):
+            self.assertEqual(covers.get(MB, "A", "B"), IMG)
+        self.assertFalse(self.files("retry").exists())
+
+    def test_archive_404_is_a_real_no(self):
+        def nope(*a):
+            raise self.urlerror.HTTPError("https://x", 404, "x", {}, None)
+
+        with mock.patch.object(covers, "_tidal", return_value=None), mock.patch.object(covers, "_caa", nope):
+            self.assertIsNone(covers.get(MB, "A", "B"))
+        self.assertTrue(self.files("none").exists())
+
+    def test_archive_5xx_is_transient(self):
+        def down(*a):
+            raise self.urlerror.HTTPError("https://x", 503, "x", {}, None)
+
+        with mock.patch.object(covers, "_tidal", return_value=None), mock.patch.object(covers, "_caa", down):
+            self.assertIsNone(covers.get(MB, "A", "B"))
+        self.assertTrue(self.files("retry").exists())

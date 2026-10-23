@@ -26,14 +26,19 @@ PRUNE = 0.05            # peso efectivo por debajo del cual un gusto se recorta
 RAW_DAYS = 60           # eventos más viejos que esto se compactan
 RAW_MAX = 300           # y nunca quedan más que esto en events.jsonl
 KNOWN_MAX = 400         # discos clasificados que se recuerdan para no repetir
-REACTIONS = ("heard", "loved", "no")
-# Cuánto suma cada reacción al artista y a cada género (MusicBrainz) del disco. "No me va" es solo sobre ESE disco:
-# lo excluye, pero no resta al artista ni al género (reacciones por ítem, nunca por género).
-DELTAS = {"loved": (3.0, 1.0), "heard": (0.5, 0.25), "no": (0.0, 0.0)}
+# "heard" es el viejo "Ya lo escuché" (sin decir si gustó): se sigue leyendo, pero la interfaz ya no lo ofrece.
+REACTIONS = ("loved", "liked", "disliked", "no", "heard")
+# Cuánto suma cada reacción al artista y a cada género (MusicBrainz) del disco. "No me interesa" es solo sobre ESE disco:
+# lo excluye, pero no resta al artista ni al género. "Lo conozco y no" resta un poco al artista de ESE disco y nada a los
+# géneros (reacciones por ítem, nunca por género).
+DELTAS = {"loved": (3.0, 1.0), "liked": (1.5, 0.5), "heard": (0.5, 0.25), "disliked": (-0.5, 0.0), "no": (0.0, 0.0)}
+# Motivo opcional de un "no": no entra al gusto; sirve para calibrar el filtro de género.
+REASONS = ("off_genre", "seen", "off_request")
 # Favoritos de las fuentes: peso base en la fecha en que se agregaron.
 SOURCE_W = {"album": (1.0, 0.5), "artist": (1.0, 0.0), "track": (0.3, 0.15)}
 DECLARED_W = 2.0        # lo que el usuario declara en su perfil no decae (lo edita él)
-LABELS = {"loved": "Me encantó", "heard": "Ya lo escuché", "no": "No me va"}
+LABELS = {"loved": "Me encantó", "liked": "Me gusta", "disliked": "No me gustó",
+          "no": "No me interesa", "heard": "Lo conocía"}
 
 _lock = threading.Lock()
 
@@ -79,7 +84,7 @@ def empty_taste(half_life_days=HALF_LIFE_DAYS):
 
 
 # ---------------------------------------------------------------- eventos
-def make_event(ts, type_, mbid, artist, album, action=None, genres=None, kind=None, preset=None):
+def make_event(ts, type_, mbid, artist, album, action=None, genres=None, kind=None, preset=None, reason=None, known=False):
     e = {"ts": iso(ts), "type": type_, "mbid": mbid, "artist": str(artist)[:160], "album": str(album)[:200]}
     if preset:
         e["preset"] = str(preset)[:30]  # con qué perfil de sugerencia se generó (contexto; la memoria es compartida)
@@ -87,6 +92,10 @@ def make_event(ts, type_, mbid, artist, album, action=None, genres=None, kind=No
         e["action"] = action
     if genres:
         e["genres"] = [str(g)[:60] for g in genres[:5]]
+    if reason in REASONS:
+        e["reason"] = reason
+    if known:
+        e["known"] = True  # ya lo conocía antes de que se lo propusiéramos (no fue un descubrimiento nuestro)
     if kind:
         e["kind"] = kind
     return e
@@ -132,7 +141,8 @@ def fold(taste, events, upto_ts=None):
         if e.get("action") in REACTIONS:
             _item_delta(t["artists"], t["genres"], e, +1, ts, hl)
             t["known"][e["mbid"]] = {"artist": e["artist"], "album": e["album"], "action": e["action"], "at": e["ts"],
-                                     "genres": e.get("genres", []), "preset": e.get("preset")}
+                                     "genres": e.get("genres", []), "preset": e.get("preset"),
+                                     "known": bool(e.get("known"))}
     return t, keep
 
 
@@ -220,12 +230,12 @@ def reactions_map(taste, events):
 
 def history(taste, events, limit=60):
     """Discos clasificados, del más nuevo al más viejo: [{mbid, artist, album, action, at}]."""
-    items = {k: {"mbid": k, "artist": v["artist"], "album": v["album"], "action": v["action"], "at": v["at"], "preset": v.get("preset")}
-             for k, v in taste["known"].items()}
+    items = {k: {"mbid": k, "artist": v["artist"], "album": v["album"], "action": v["action"], "at": v["at"], "preset": v.get("preset"),
+                  "known": bool(v.get("known"))} for k, v in taste["known"].items()}
     for mbid, e in latest_reactions(events).items():
         if e.get("action") in REACTIONS:
             items[mbid] = {"mbid": mbid, "artist": e["artist"], "album": e["album"], "action": e["action"], "at": e["ts"],
-                           "preset": e.get("preset")}
+                           "preset": e.get("preset"), "known": bool(e.get("known"))}
         else:
             items.pop(mbid, None)
     return sorted(items.values(), key=lambda x: x["at"], reverse=True)[:limit]
@@ -280,8 +290,9 @@ class Store:
         self.md_file = self.dir / "memory.md"
 
     def _write(self, path, text):
-        self.dir.mkdir(parents=True, exist_ok=True)
-        tmp = path.with_suffix(path.suffix + ".tmp")
+        path = Path(path)
+        path.parent.mkdir(parents=True, exist_ok=True)  # también subcarpetas (memory/)
+        tmp = path.with_name(f"{path.name}.{os.getpid()}.{threading.get_ident()}.tmp")  # único por hilo: dos escrituras a la vez no se pisan
         tmp.write_text(text, encoding="utf-8")
         osenv.secure(tmp, 0o600)
         tmp.replace(path)

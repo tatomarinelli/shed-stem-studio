@@ -141,9 +141,9 @@ def album_art(album_id):
                 # Snapshot viejo (sin códigos de portada): una sola vez se completa desde el listado de favoritos, que además queda en caché.
                 try:
                     library()
+                    _covers_filled["done"] = True  # si falló (red, sesión) no se da por hecho: el próximo pedido reintenta
                 except Exception:
                     pass
-                _covers_filled["done"] = True
         cover = _covers.get(str(album_id))
     # Con el código del listado no hace falta pedir el disco: hay discos que TIDAL ya no entrega por id pero siguen en favoritos.
     url = cover_url(cover) if cover else _get_session().album(int(album_id)).image(320)
@@ -389,6 +389,32 @@ def stream_source(track_id):
                 _stream_cache[track_id] = (time.time(), value)
                 return value
     raise SourceError("stream", "TIDAL no entregó un stream que se pueda escuchar directamente. Probá separar el tema.")
+
+
+def download_info(track_id, lossless=True):
+    """Para bajar un tema a un archivo (solo con la sesión del propio usuario): direcciones del audio, formato y datos para etiquetar.
+    Prefiere lossless; si el stream viene cifrado cae a 320 kbps. Lanza SourceError si TIDAL no entrega nada usable."""
+    import tidalapi
+
+    track_id = int(track_id)
+    with _lock:
+        session = _get_session()
+        track = session.track(track_id)
+        album = getattr(track, "album", None)
+        artist = getattr(track, "artist", None)
+        date = getattr(track, "tidal_release_date", None) or getattr(album, "release_date", None)
+        meta = {"title": track.name, "artist": artist.name if artist else "", "album": getattr(album, "name", "") or "",
+                "track": getattr(track, "track_num", None), "year": getattr(date, "year", None) or getattr(album, "year", None)}
+        cover = getattr(album, "cover", None)
+        qualities = (tidalapi.Quality.high_lossless, tidalapi.Quality.low_320k) if lossless else (tidalapi.Quality.low_320k,)
+        for quality in qualities:
+            session.config.quality = quality
+            manifest = track.get_stream().get_stream_manifest()
+            if manifest.is_bts and manifest.encryption_type not in (None, "", "NONE"):
+                continue
+            return {"urls": list(manifest.get_urls()), "bts": bool(manifest.is_bts), "cover": cover_url(cover, 640) if cover else None,
+                    "ext": (manifest.file_extension or "") if manifest.is_bts else "", "meta": meta}
+    raise SourceError("stream", "TIDAL no entregó un audio que se pueda descargar.")
 
 
 def find_track(artist, title, album=""):

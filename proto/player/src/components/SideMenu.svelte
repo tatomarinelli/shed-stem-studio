@@ -11,6 +11,8 @@
     fuentes: { label: 'Fuentes', icon: 'M4 6h16M4 12h16M4 18h10' },
     musica: { label: 'Música', icon: 'M9 18V6l11-2v12M9 18a3 3 0 11-6 0 3 3 0 016 0zM20 16a3 3 0 11-6 0 3 3 0 016 0z' },
     recomendaciones: { label: 'Recomendaciones', icon: 'M12 3l2.6 5.6 6.1.7-4.5 4.2 1.2 6L12 16.5 6.6 19.5l1.2-6L3.3 9.3l6.1-.7z' },
+    agentes: { label: 'Agentes', icon: 'M3 12h5M16 12h5M12 9a3 3 0 100 6 3 3 0 000-6z' },
+    mapa: { label: 'Mapa', icon: 'M5 6a2 2 0 100 4 2 2 0 000-4zM19 4a2 2 0 100 4 2 2 0 000-4zM15 16a2 2 0 100 4 2 2 0 000-4zM7 9l5 4M17 7l-3 4M12 13l3 3' },
     estudio: { label: 'Estudio', icon: 'M3 12h3l2-6 4 12 3-9 2 3h4' },
     ajustes: { label: 'Ajustes', icon: 'M4 7h10M18 7h2M4 17h2M10 17h10M14 5v4M8 15v4' },
   };

@@ -2,17 +2,20 @@
   import { onMount } from 'svelte';
   import { settings, type Config } from '../lib/settings.svelte';
   import FolderPicker from '../components/FolderPicker.svelte';
+  import { downloads } from '../lib/downloads.svelte';
   import Progress from '../components/Progress.svelte';
   import JobNote from '../components/JobNote.svelte';
   import LlmDetect from '../components/LlmDetect.svelte';
   import BackendPicker from '../components/BackendPicker.svelte';
   import LlmServer from '../components/LlmServer.svelte';
   import { setup } from '../lib/setup.svelte';
+  import { recs } from '../lib/recs.svelte';
   import Icon from '../components/Icon.svelte';
   import ResourceMonitor from '../components/ResourceMonitor.svelte';
 
   let resOpen = $state(true); // "Recursos" arranca abierto; cerrado, no se sondea
   onMount(() => {
+    recs.loadEstimate({ context: 'now' });
     void settings.load().then(() => settings.syncJobs());
     settings.watchServices(true);
     return () => settings.watchServices(false);
@@ -36,7 +39,7 @@
   const sepRecommended = $derived((hw?.gpus.find(g => g.accel)?.vramGB ?? 0) >= 8 ? 'RoFormer (BS-Roformer-SW)' : 'Demucs 6 stems (htdemucs_6s)');
 
   // Selector de carpetas: qué ajuste se está eligiendo.
-  type PathKey = 'dataDir' | 'ollamaModelsDir' | 'separationModelsDir' | 'separationEnvDir';
+  type PathKey = 'dataDir' | 'downloadDir' | 'ollamaModelsDir' | 'separationModelsDir' | 'separationEnvDir';
   let picking = $state<null | { key: PathKey | 'musicFolders'; title: string; start: string }>(null);
   let urlDraft = $state('');
   let customModel = $state('');
@@ -52,6 +55,7 @@
 
   const rows: { key: PathKey; label: string; help: string }[] = [
     { key: 'dataDir', label: 'Datos de Shed Stem Studio', help: 'Stems nuevos y archivos temporales. Lo que ya está guardado no se mueve solo.' },
+    { key: 'downloadDir', label: 'Descargas', help: 'Donde caen los temas que bajás con el botón Descargar, como «Artista - Título». Por defecto, dentro de la carpeta de datos.' },
     { key: 'ollamaModelsDir', label: 'Modelos de recomendaciones', help: 'Donde se descargan. Los ya descargados no se mueven solos.' },
     { key: 'separationModelsDir', label: 'Modelos de separación', help: 'Donde se descarga el modelo. Los ya descargados no se mueven solos.' },
     { key: 'separationEnvDir', label: 'Entorno de separación', help: 'Tiene que tener venv/bin/audio-separator.' },
@@ -158,6 +162,38 @@
       <LlmDetect />
     </div>
     <div class="block">
+      <h4>Contexto del disco</h4>
+      <p class="muted small">El texto de Wikipedia resumido por el modelo. Pedirlo en cada búsqueda suma tiempo{recs.estimate?.parts.context ? ` (≈ ${Math.round(recs.estimate.parts.context)} s)` : ''}.</p>
+      <div class="seg" role="group" aria-label="Cuándo armar el contexto">
+        {#each [['demand', 'Al abrir cada disco (rápido)'], ['now', 'Al generar (más lento)']] as [id, label] (id)}
+          <button type="button" class:on={(settings.config?.recsContext ?? 'demand') === id} aria-pressed={(settings.config?.recsContext ?? 'demand') === id}
+            onclick={() => settings.save({ recsContext: id as 'demand' | 'now' })}>{label}</button>
+        {/each}
+      </div>
+    </div>
+    <div class="block">
+      <h4>Revisor</h4>
+      <p class="muted small">Segunda etapa del flujo (buscador → revisor → clasificador, una por vez): un modelo lee los discos elegidos contra lo que pediste y baja los que no encajan. Es una opinión del modelo, no un dato verificado, así que solo puede bajar posiciones.</p>
+      <select aria-label="Modelo del revisor" value={settings.config?.recsReviewer ?? 'off'} onchange={e => settings.save({ recsReviewer: e.currentTarget.value })}>
+        <option value="off">Apagado</option>
+        <option value="same">El mismo modelo que busca</option>
+        {#each st.recommendations.models as m (m.label)}<option value={m.label}>{m.label}</option>{/each}
+      </select>
+    </div>
+    <div class="block">
+      <h4>Clasificador complementario</h4>
+      <p class="muted small">Una segunda opinión sobre los discos que la barrera de género deja "cercanos", leyendo la descripción de Wikipedia. Nunca cambia lo que MusicBrainz ya descarta, y sus aciertos se miden con tus reacciones.</p>
+      {#if settings.config?.classifier === 'kev'}
+        <p class="muted small">Kev se prende aparte (<code>python -m kev.serve</code>) y se busca en {settings.config?.classifierUrl ?? 'http://127.0.0.1:8009'}. El 4B ocupa toda una GPU de 16 GB; el 0,8B (≈ 4 GB) convive con el modelo de recomendación.</p>
+      {/if}
+      <div class="seg" role="group" aria-label="Clasificador complementario">
+        {#each [['off', 'Apagado'], ['llm', 'Con el modelo local'], ['kev', 'Con Kev']] as [id, label] (id)}
+          <button type="button" class:on={(settings.config?.classifier ?? 'off') === id} aria-pressed={(settings.config?.classifier ?? 'off') === id}
+            onclick={() => settings.save({ classifier: id as 'off' | 'llm' | 'kev' })}>{label}</button>
+        {/each}
+      </div>
+    </div>
+    <div class="block">
       <h4>Modelos</h4>
       {#if inUseServer && inUseServer.kind !== 'ollama'}
         <p class="muted">{inUseServer.kind === 'llamacpp' ? 'llama.cpp' : 'Este servidor'} usa el modelo que tiene cargado.</p>
@@ -253,7 +289,7 @@
           <p class="path">{host.path}</p>
           <p class="muted">Con Docker esta carpeta se define al levantar: cambiá <code>{host.var}</code> en <code>docker/.env</code> y volvé a levantar.</p>
         {:else}
-          <div class="head"><b>{r.label}</b><span class="btns"><button class="ghost" onclick={() => settings.openFolder(r.key)}>Abrir carpeta</button><button onclick={() => pick(r.key, `Elegí: ${r.label.toLowerCase()}`, eff[r.key])}>Cambiar</button></span></div>
+          <div class="head"><b>{r.label}</b><span class="btns"><button class="ghost" onclick={() => r.key === 'downloadDir' ? downloads.reveal({ path: eff[r.key] }) : settings.openFolder(r.key)}>Abrir carpeta</button><button onclick={() => pick(r.key, `Elegí: ${r.label.toLowerCase()}`, eff[r.key])}>Cambiar</button></span></div>
           <p class="path">{eff[r.key]}</p>
           <p class="muted">{r.help}</p>
         {/if}

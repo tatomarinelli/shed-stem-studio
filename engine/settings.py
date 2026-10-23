@@ -1,6 +1,7 @@
 """Ajustes del usuario: dónde viven los datos, los modelos y la música. Se guardan en ~/.config/stemshed/settings.json."""
 import json
 import os
+import re
 import osenv
 import urllib.parse
 from pathlib import Path
@@ -11,6 +12,7 @@ FORBIDDEN = osenv.FORBIDDEN
 DEFAULTS = {
     "dataDir": os.environ.get("STEMSHED_DATA", osenv.default_root("stemshed")),
     "ollamaModelsDir": "",            # vacío = <dataDir>/models/ollama
+    "downloadDir": "",                # vacío = <dataDir>/downloads: dónde caen los temas que el usuario descarga con el botón
     "separationModelsDir": os.environ.get("STEMSHED_SEP_MODELS", ""),   # vacío = <separationEnvDir>/models
     "separationEnvDir": os.environ.get("STEMS_ENV", osenv.default_root("tidal-stems")),
     "musicFolders": [os.environ["STEMSHED_DEFAULT_MUSIC"]] if os.environ.get("STEMSHED_DEFAULT_MUSIC") else [],
@@ -19,6 +21,11 @@ DEFAULTS = {
     "llmProvider": "ollama",          # "ollama" o "llamacpp" (llama-server): qué idioma habla el servidor de llmUrl
     "llmModel": "",                   # vacío = el primero instalado
     "recsAuto": True,                 # el motor genera solo el "Disco de hoy" cuando toca
+    "classifier": "off",              # verificador complementario de texto (NLI) para los casos que la barrera de género deja en duda: "off" | "llm" | "kev"
+    "recsReviewer": "off",            # agente revisor (2.ª etapa): "off" | "same" (el mismo modelo) | nombre de un modelo instalado. Una etapa a la vez, sin paralelo
+    "recsPlanner": "off",             # agente planificador (etapa 0): "off" | "same" (el mismo modelo) | nombre de un modelo instalado. Apagado por defecto: la medición no lo justificó (docs/recs-plan-v4.md)
+    "classifierUrl": "http://127.0.0.1:8009",   # servidor de Kev (python -m kev.serve) si classifier = "kev"; lo prende el usuario
+    "recsContext": "demand",          # contexto del disco (Wikipedia + resumen): "demand" = al abrirlo, "now" = al generar (más lento)
     "recsCadenceHours": 24,           # 24 = uno por día (cambia con la fecha); otro valor = cada N horas
     "setup": {"done": False, "skipped": []},   # asistente de primer inicio: si ya se cerró y qué pasos se saltaron
     "recsHalfLifeDays": 180,          # vida media de los gustos en la memoria
@@ -43,6 +50,7 @@ def effective(data=None):
     data = data or load()
     out = dict(data)
     out["ollamaModelsDir"] = data["ollamaModelsDir"] or str(Path(data["dataDir"]) / "models" / "ollama")
+    out["downloadDir"] = data["downloadDir"] or str(Path(data["dataDir"]) / "downloads")
     out["separationModelsDir"] = data["separationModelsDir"] or str(Path(data["separationEnvDir"]) / "models")
     return out
 
@@ -77,6 +85,8 @@ def validate(patch):
         out["dataDir"] = _writable_dir(patch["dataDir"], "Carpeta de datos")
     if "ollamaModelsDir" in patch:
         out["ollamaModelsDir"] = _writable_dir(patch["ollamaModelsDir"], "Carpeta de modelos de recomendación") if patch["ollamaModelsDir"] else ""
+    if "downloadDir" in patch:
+        out["downloadDir"] = _writable_dir(patch["downloadDir"], "Carpeta de descargas") if patch["downloadDir"] else ""
     if "separationModelsDir" in patch:
         out["separationModelsDir"] = _writable_dir(patch["separationModelsDir"], "Carpeta de modelos de separación") if patch["separationModelsDir"] else ""
     if "separationEnvDir" in patch:
@@ -111,6 +121,14 @@ def validate(patch):
         if not isinstance(patch["recsAuto"], bool):
             raise SettingsError("Disco de hoy automático: valor inválido.")
         out["recsAuto"] = patch["recsAuto"]
+    if "classifier" in patch:
+        if patch["classifier"] not in ("off", "llm", "kev"):
+            raise SettingsError("Clasificador inválido.")
+        out["classifier"] = patch["classifier"]
+    if "recsContext" in patch:
+        if patch["recsContext"] not in ("demand", "now"):
+            raise SettingsError("Modo de contexto inválido.")
+        out["recsContext"] = patch["recsContext"]
     if "recsCadenceHours" in patch:
         if patch["recsCadenceHours"] not in CADENCES:
             raise SettingsError("Cada cuánto: opción inválida.")
@@ -133,6 +151,21 @@ def validate(patch):
         if u.scheme not in ("http", "https") or u.hostname not in ("127.0.0.1", "localhost", "::1"):
             raise SettingsError("Servidor de modelos: tiene que ser una dirección de esta computadora (http://127.0.0.1:puerto).")
         out["llmUrl"] = f"{u.scheme}://{u.netloc}"
+    if "recsReviewer" in patch:
+        v = patch["recsReviewer"]
+        if not isinstance(v, str) or not re.fullmatch(r"[A-Za-z0-9._:/-]{1,80}", v):
+            raise SettingsError("Revisor: 'off', 'same' o el nombre de un modelo.")
+        out["recsReviewer"] = v
+    if "recsPlanner" in patch:
+        v = patch["recsPlanner"]
+        if not isinstance(v, str) or not re.fullmatch(r"[A-Za-z0-9._:/-]{1,80}", v):
+            raise SettingsError("Planificador: 'off', 'same' o el nombre de un modelo.")
+        out["recsPlanner"] = v
+    if "classifierUrl" in patch:
+        u = urllib.parse.urlparse(str(patch["classifierUrl"]).strip())
+        if u.scheme not in ("http", "https") or u.hostname not in ("127.0.0.1", "localhost", "::1"):
+            raise SettingsError("Servidor de Kev: tiene que ser una dirección de esta computadora (http://127.0.0.1:puerto).")
+        out["classifierUrl"] = f"{u.scheme}://{u.netloc}"
     if "llmProvider" in patch:
         if patch["llmProvider"] not in ("ollama", "llamacpp"):
             raise SettingsError("Tipo de servidor de modelos: opción inválida.")

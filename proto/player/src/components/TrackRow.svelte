@@ -9,9 +9,10 @@
   import { seed } from '../lib/seed.svelte';
   import { nav } from '../lib/nav.svelte';
   import OpenIn from './OpenIn.svelte';
+  import DownloadMenu from './DownloadMenu.svelte';
 
-  let { title, artist, meta = '', duration = '', localId, origin = false, badge = '', sourceId, resolve = false, album = '', ids, art, links, compact = false, n = 0, queue, qi = 0 }:
-    { compact?: boolean; n?: number; queue?: QItem[]; qi?: number; title: string; artist: string; meta?: string; duration?: string; localId?: string; origin?: boolean; badge?: string; sourceId?: string; resolve?: boolean; album?: string; ids?: { local?: string; tidal?: string }; art?: string; links?: Record<string, string> } = $props();
+  let { title, artist, meta = '', duration = '', localId, origin = false, badge = '', sourceId, resolve = false, album = '', ids, art, links, compact = false, n = 0, queue, qi = 0, select = false, checked = false, onpick }:
+    { select?: boolean; checked?: boolean; onpick?: (on: boolean) => void; compact?: boolean; n?: number; queue?: QItem[]; qi?: number; title: string; artist: string; meta?: string; duration?: string; localId?: string; origin?: boolean; badge?: string; sourceId?: string; resolve?: boolean; album?: string; ids?: { local?: string; tidal?: string }; art?: string; links?: Record<string, string> } = $props();
 
   // Un tema "referencia" (de favoritos, playlists...) no trae su audio: se busca con el orden de fuentes de Ajustes.
   let resolved = $state<string | null>(null);
@@ -44,10 +45,17 @@
     const list = queue?.length ? queue : [self];
     playback.playFrom(list, queue?.length ? qi : 0);
   }
+  // Descarga: ids que pueden tener estado (cualquier fuente del tema) y archivo propio, si existe.
+  const dlIds = $derived(ids ? idList : [resolved ?? queued ?? sourceId].filter((x): x is string => !!x));
+  const ownId = $derived(ids?.local ?? (sourceId && /^L/.test(sourceId) ? sourceId : undefined));
+  const ownOnly = $derived(ids ? !!ids.local && !ids.tidal : !!ownId);
   async function separate() { const id = await ensure(); if (id) separation.start(id); }
 </script>
 
-<li class="trk"><div class="track" class:here class:going class:compact class:numbered={compact && n > 0}>
+<li class="trk"><div class="track" class:here class:going class:compact class:selecting={select} class:numbered={compact && n > 0}>
+  {#if select}
+    <input class="pick" type="checkbox" {checked} onchange={e => onpick?.(e.currentTarget.checked)} aria-label="Elegir {title}" />
+  {/if}
   {#if compact && n > 0}
     <span class="n muted num">{n}</span>
   {:else}
@@ -58,7 +66,9 @@
     {#if !(compact && n > 0)}<span class="muted">{artist}{meta ? `, ${meta}` : ''}</span>{/if}
   </div>
   <span class="muted num dur">{duration}</span>
-  {#if compact}
+  {#if compact && select}
+  <span></span>
+  {:else if compact}
   <div class="acts ic">
     <!-- Dentro de una cola (álbum) ▶ siempre escucha; un tema suelto ya separado se abre en el Estudio. -->
     {#if separated && !queue?.length}
@@ -92,6 +102,7 @@
       </button>
     {/if}
     <OpenIn {links} size={14} />
+    <DownloadMenu ids={dlIds} resolve={ensure} localId={ownId} localOnly={ownOnly} />
     {#if job?.state === 'error'}<span class="err" role="alert" title={job.message}>!</span>{/if}
   </div>
   {:else}
@@ -128,6 +139,9 @@
   .badge { font-size: 11.5px; font-weight: 600; color: #7cc7a3; border: 1px solid color-mix(in srgb, #7cc7a3 50%, transparent); border-radius: 999px; padding: 0 8px; margin-left: 6px; vertical-align: 1px; }
   .track.compact { grid-template-columns: 44px 1fr auto auto; gap: 10px; padding: 5px 8px; }
   .track.compact.numbered { grid-template-columns: 22px 1fr auto auto; }
+  .track.compact.selecting { grid-template-columns: 26px 44px 1fr auto auto; }
+  .track.compact.selecting.numbered { grid-template-columns: 26px 22px 1fr auto auto; }
+  .pick { width: 18px; height: 18px; margin: 0 4px; accent-color: #7cc7a3; }
   .n { text-align: right; font-size: 13px; }
   .acts.ic { opacity: 1; align-items: center; gap: 4px; }
   .ib { min-width: 30px; height: 30px; padding: 0; display: grid; place-items: center; border-radius: 50%; background: transparent; border: 1px solid var(--glass-line); color: var(--text); }

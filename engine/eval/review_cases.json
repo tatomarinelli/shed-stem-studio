@@ -1,0 +1,305 @@
+{
+ "note": "Etiquetas puestas a mano por el asistente: modo 'concentrarme' (música tranquila, pareja, sin sobresaltos, con poca voz protagonista). yes = encaja; no = claramente no. Son extremos claros a propósito: sirven para ver si el revisor tiene sentido común, no para los casos ambiguos. Revisalas.",
+ "mode": "concentrarme",
+ "cases": [
+  {
+   "artist": "Brian Eno",
+   "album": "Ambient 1: Music for Airports",
+   "year": 1978,
+   "genres": [
+    "ambient"
+   ],
+   "label": "yes"
+  },
+  {
+   "artist": "Miles Davis",
+   "album": "Kind of Blue",
+   "year": 1959,
+   "genres": [
+    "jazz",
+    "modal jazz"
+   ],
+   "label": "yes"
+  },
+  {
+   "artist": "Bill Evans Trio",
+   "album": "Waltz for Debby",
+   "year": 1961,
+   "genres": [
+    "jazz"
+   ],
+   "label": "yes"
+  },
+  {
+   "artist": "Stan Getz & João Gilberto",
+   "album": "Getz/Gilberto",
+   "year": 1964,
+   "genres": [
+    "bossa nova",
+    "jazz"
+   ],
+   "label": "yes"
+  },
+  {
+   "artist": "Keith Jarrett",
+   "album": "The Köln Concert",
+   "year": 1975,
+   "genres": [
+    "jazz",
+    "piano"
+   ],
+   "label": "yes"
+  },
+  {
+   "artist": "Boards of Canada",
+   "album": "Music Has the Right to Children",
+   "year": 1998,
+   "genres": [
+    "idm",
+    "ambient"
+   ],
+   "label": "yes"
+  },
+  {
+   "artist": "Tycho",
+   "album": "Dive",
+   "year": 2011,
+   "genres": [
+    "ambient",
+    "downtempo"
+   ],
+   "label": "yes"
+  },
+  {
+   "artist": "John Coltrane",
+   "album": "Ballads",
+   "year": 1963,
+   "genres": [
+    "jazz"
+   ],
+   "label": "yes"
+  },
+  {
+   "artist": "Chet Baker",
+   "album": "Chet Baker Sings",
+   "year": 1956,
+   "genres": [
+    "jazz",
+    "vocal jazz"
+   ],
+   "label": "yes"
+  },
+  {
+   "artist": "Nils Frahm",
+   "album": "Felt",
+   "year": 2011,
+   "genres": [
+    "modern classical",
+    "ambient"
+   ],
+   "label": "yes"
+  },
+  {
+   "artist": "Max Richter",
+   "album": "Sleep",
+   "year": 2015,
+   "genres": [
+    "modern classical",
+    "ambient"
+   ],
+   "label": "yes"
+  },
+  {
+   "artist": "Brian Eno",
+   "album": "Apollo: Atmospheres and Soundtracks",
+   "year": 1983,
+   "genres": [
+    "ambient"
+   ],
+   "label": "yes"
+  },
+  {
+   "artist": "Bonobo",
+   "album": "Black Sands",
+   "year": 2010,
+   "genres": [
+    "downtempo"
+   ],
+   "label": "yes"
+  },
+  {
+   "artist": "Sigur Rós",
+   "album": "( )",
+   "year": 2002,
+   "genres": [
+    "post-rock"
+   ],
+   "label": "yes"
+  },
+  {
+   "artist": "Ryuichi Sakamoto",
+   "album": "async",
+   "year": 2017,
+   "genres": [
+    "ambient"
+   ],
+   "label": "yes"
+  },
+  {
+   "artist": "Ahmad Jamal",
+   "album": "But Not for Me",
+   "year": 1958,
+   "genres": [
+    "jazz"
+   ],
+   "label": "yes"
+  },
+  {
+   "artist": "Slayer",
+   "album": "Reign in Blood",
+   "year": 1986,
+   "genres": [
+    "thrash metal"
+   ],
+   "label": "no"
+  },
+  {
+   "artist": "Rage Against the Machine",
+   "album": "Rage Against the Machine",
+   "year": 1992,
+   "genres": [
+    "rap metal"
+   ],
+   "label": "no"
+  },
+  {
+   "artist": "The Prodigy",
+   "album": "The Fat of the Land",
+   "year": 1997,
+   "genres": [
+    "big beat",
+    "electronic"
+   ],
+   "label": "no"
+  },
+  {
+   "artist": "Nirvana",
+   "album": "Nevermind",
+   "year": 1991,
+   "genres": [
+    "grunge"
+   ],
+   "label": "no"
+  },
+  {
+   "artist": "Daft Punk",
+   "album": "Discovery",
+   "year": 2001,
+   "genres": [
+    "house",
+    "electronic"
+   ],
+   "label": "no"
+  },
+  {
+   "artist": "James Brown",
+   "album": "Live at the Apollo",
+   "year": 1963,
+   "genres": [
+    "funk",
+    "soul"
+   ],
+   "label": "no"
+  },
+  {
+   "artist": "Wu-Tang Clan",
+   "album": "Enter the Wu-Tang (36 Chambers)",
+   "year": 1993,
+   "genres": [
+    "hip hop"
+   ],
+   "label": "no"
+  },
+  {
+   "artist": "Ramones",
+   "album": "Ramones",
+   "year": 1976,
+   "genres": [
+    "punk rock"
+   ],
+   "label": "no"
+  },
+  {
+   "artist": "Black Sabbath",
+   "album": "Paranoid",
+   "year": 1970,
+   "genres": [
+    "heavy metal"
+   ],
+   "label": "no"
+  },
+  {
+   "artist": "Sonic Youth",
+   "album": "Daydream Nation",
+   "year": 1988,
+   "genres": [
+    "noise rock"
+   ],
+   "label": "no"
+  },
+  {
+   "artist": "Beastie Boys",
+   "album": "Paul's Boutique",
+   "year": 1989,
+   "genres": [
+    "hip hop"
+   ],
+   "label": "no"
+  },
+  {
+   "artist": "AC/DC",
+   "album": "Back in Black",
+   "year": 1980,
+   "genres": [
+    "hard rock"
+   ],
+   "label": "no"
+  },
+  {
+   "artist": "Fela Kuti",
+   "album": "Zombie",
+   "year": 1976,
+   "genres": [
+    "afrobeat"
+   ],
+   "label": "no"
+  },
+  {
+   "artist": "Metallica",
+   "album": "Master of Puppets",
+   "year": 1986,
+   "genres": [
+    "thrash metal"
+   ],
+   "label": "no"
+  },
+  {
+   "artist": "Dead Kennedys",
+   "album": "Fresh Fruit for Rotting Vegetables",
+   "year": 1980,
+   "genres": [
+    "hardcore punk"
+   ],
+   "label": "no"
+  },
+  {
+   "artist": "Public Enemy",
+   "album": "It Takes a Nation of Millions to Hold Us Back",
+   "year": 1988,
+   "genres": [
+    "hip hop"
+   ],
+   "label": "no"
+  }
+ ]
+}

@@ -19,7 +19,7 @@ export interface LlmServer {
   installed: boolean; running: boolean; canInstall: boolean; approxGb: number;
   accel: 'cuda' | 'vulkan' | 'cpu'; gpu: string | null; job: Pull;
 }
-export interface Config { llmProvider: 'ollama' | 'llamacpp'; audioSources: string[]; dataDir: string; ollamaModelsDir: string; separationModelsDir: string; separationEnvDir: string; musicFolders: string[]; llmUrl: string; llmModel: string }
+export interface Config { llmProvider: 'ollama' | 'llamacpp'; audioSources: string[]; dataDir: string; ollamaModelsDir: string; separationModelsDir: string; separationEnvDir: string; downloadDir: string; musicFolders: string[]; llmUrl: string; llmModel: string; recsContext?: 'demand' | 'now'; classifier?: 'off' | 'llm' | 'kev'; classifierUrl?: string; recsReviewer?: string }
 export interface AudioSource { id: 'local' | 'tidal'; label: string; enabled: boolean; available: boolean; detail: string }
 export interface Pull {
   state: 'idle' | 'running' | 'done' | 'error' | 'cancelled'; percent?: number; message?: string; done?: number; total?: number; rate?: number;

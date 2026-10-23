@@ -89,6 +89,43 @@ class Reactions(unittest.TestCase):
         self.assertAlmostEqual(gw(w, "reggae"), 1.0)
 
 
+class NewReactions(unittest.TestCase):
+    def test_liked_is_between_heard_and_loved(self):
+        w = M.weights(M.empty_taste(), [ev(0, "liked", "a")], [], {}, T0)
+        self.assertAlmostEqual(aw(w, "Bob Marley"), 1.5)
+        self.assertAlmostEqual(gw(w, "reggae"), 0.5)
+
+    def test_disliked_only_touches_that_artist_never_the_genre(self):
+        evs = [ev(0, "loved", "a", artist="X", genres=("reggae",)), ev(0, "disliked", "b", artist="Y", genres=("reggae",))]
+        w = M.weights(M.empty_taste(), evs, [], {}, T0)
+        self.assertAlmostEqual(gw(w, "reggae"), 1.0)  # el género no baja por el "no" a un disco
+        self.assertEqual(aw(w, "Y"), 0.0)             # y el artista ni aparece (peso negativo recortado)
+        self.assertEqual(M.reactions_map(M.empty_taste(), evs)["b"], "disliked")
+
+    def test_legacy_heard_still_counts(self):
+        w = M.weights(M.empty_taste(), [ev(0, "heard", "a")], [], {}, T0)
+        self.assertAlmostEqual(aw(w, "Bob Marley"), 0.5)
+        self.assertEqual(M.LABELS["heard"], "Lo conocía")
+
+    def test_change_of_mind_after_compaction_with_new_actions(self):
+        taste, keep = M.compact(M.empty_taste(), [ev(0, "disliked", "a")], T0 + 100 * DAY)
+        self.assertEqual(keep, [])
+        w = M.weights(taste, [ev(101, "liked", "a")], [], {}, T0 + 101 * DAY, cut=0)
+        self.assertAlmostEqual(aw(w, "Bob Marley"), 1.5, places=6)
+
+    def test_known_flag_travels_to_history_and_survives_compaction(self):
+        e = M.make_event(T0, "reaction", "a", "X", "Y", "liked", ["jazz"], known=True)
+        self.assertTrue(e["known"])
+        self.assertNotIn("known", M.make_event(T0, "reaction", "b", "X", "Z", "liked"))
+        self.assertTrue(M.history(M.empty_taste(), [e])[0]["known"])
+        taste, _ = M.compact(M.empty_taste(), [e], T0 + 100 * DAY)
+        self.assertTrue(M.history(taste, [])[0]["known"])
+
+    def test_reason_only_valid_values(self):
+        self.assertEqual(M.make_event(T0, "reaction", "a", "X", "Y", "no", reason="off_genre")["reason"], "off_genre")
+        self.assertNotIn("reason", M.make_event(T0, "reaction", "a", "X", "Y", "no", reason="otra cosa"))
+
+
 class Compaction(unittest.TestCase):
     def events(self):
         out = []
